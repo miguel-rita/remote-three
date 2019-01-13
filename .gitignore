@@ -1,0 +1,10 @@
+.DS_Store*
+.idea/*
+
+preprocessed_data/*
+preprocessed_data/.dir.txt
+
+data/*
+data/.dir.txt
+
+notebooks/.ipynb_check*
