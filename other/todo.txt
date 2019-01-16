@@ -1,1 +1,4 @@
 [] issue of thresholded probas or not for next stack level
+[] unbalanced issue
+[] outlier removal (eg. signals 144-146)
+[] test set EDA

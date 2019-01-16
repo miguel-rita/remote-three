@@ -34,9 +34,8 @@ def atomic_worker(args):
             'mean_height',
             'median_height',
             'std_height',
-            'mean_prominence',
-            'median_prominence',
-            'std_prominence',
+            'max_height',
+            'min_height',
         ]
 
         feat_names.extend(base_feats_names)
@@ -61,10 +60,8 @@ def atomic_worker(args):
                 np.mean(peak_heights),
                 np.median(peak_heights),
                 np.std(peak_heights),
-
-                np.mean(peak_prominences),
-                np.median(peak_prominences),
-                np.std(peak_prominences),
+                np.max(peak_heights),
+                np.min(peak_heights),
             ]
             for k, feat in enumerate(feat_list):
                 base_feats_array[i, k] = feat
@@ -137,7 +134,7 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v4_jan15',
+    'base-feats': 'base-feats_v5_jan16',
 }
 
 for ft_name, file_name in feats_to_gen.items():

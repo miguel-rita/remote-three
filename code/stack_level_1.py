@@ -33,6 +33,7 @@ def main():
 
     # Select relevant cached features
     train_feats_list = [
+        # '../features/pp_train_db20_base-feats_v5_jan16.h5',
         '../features/pp_train_db20_base-feats_v4_jan15.h5',
     ]
     test_feats_list = [
@@ -46,7 +47,7 @@ def main():
         'lgbm-models'   : bool(1),
     }
 
-    model_name = 'v4_15jan'
+    model_name = 'v5_16jan'
 
     feat_blacklist = []
 
@@ -80,9 +81,9 @@ def main():
 
         lgbm_model_0.fit_predict(
             iteration_name=model_name,
-            predict_test=True,
+            predict_test=False,
             save_preds=False,
-            produce_sub=True,
+            produce_sub=False,
             save_imps=True,
             save_aux_visu=False,
         )

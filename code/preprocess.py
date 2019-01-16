@@ -29,7 +29,7 @@ def atomic_worker(args):
     '''
 
     chunk_path, mother_wavelet, num_dec_levels, threshold_value_method, num_low_freq_levels,\
-    num_high_freq_levels, threshold_method, save_dir_relative_path, preprocessed_name = args
+    num_high_freq_levels, threshold_method, align_phase, save_dir_relative_path, preprocessed_name = args
 
     # 0. load chunk and get chunk suffix
     print(f'> preprocess.py : Starting preprocessing on chunk at {chunk_path} . . .')
@@ -39,10 +39,22 @@ def atomic_worker(args):
     # 1. retrieve DWT coeffs
     print(f'> preprocess.py : Computing DWT for {raw_signals.shape[0]:d} signals . . .')
     coeffs = pywt.wavedec(raw_signals, mother_wavelet, level=num_dec_levels)
-    del raw_signals
+
+    # 2. get phase shift offsets to align signals from reconstruction of D coeffs (low pass)
+
+    # get sine wave peak loc from D coeff-only reconstruction
+    coeffs_cp = [c.copy() for c in coeffs]
+    for lvl in np.arange(1, len(coeffs_cp)):
+        coeffs_cp[lvl] *= 0
+    sine_waves = pywt.waverec(coeffs_cp, mother_wavelet).astype(np.int8)
+    sine_peak_locs = np.argmax(sine_waves, axis=1)
+    # get roll offsets since sine wave peak corresponds to pi/2
+    roll_offsets = (raw_signals.shape[1] / 4 - sine_peak_locs).astype(np.int32)
+
+    del raw_signals, sine_waves
     gc.collect()
 
-    # 2. calculate level thresholds
+    # 3. calculate level thresholds
     print(f'> preprocess.py : Computing thresholds . . .')
     if threshold_value_method == 'mad':
         const = 1 / 0.6745  # White-noise-related scaling
@@ -53,11 +65,11 @@ def atomic_worker(args):
     else:
         raise ValueError(f'Unknown threshold_value_method : {threshold_value_method}')
 
-    # 3. nullify low freq coeffs
+    # 4. nullify low freq coeffs
     for lvl in range(num_low_freq_levels):
         coeffs[lvl] *= 0
 
-    # 4. apply thresholding operation to high freq coeffs
+    # 5. apply thresholding operation to high freq coeffs
     print(f'> preprocess.py : Applying thresholds . . .')
     num_coeffs = len(coeffs)
     if num_high_freq_levels == None:
@@ -66,11 +78,15 @@ def atomic_worker(args):
     for lvl in np.arange(num_coeffs - num_high_freq_levels, num_coeffs, 1):
         coeffs[lvl] = threshold(coeffs[lvl], thresholds[lvl], mode=threshold_method)
 
-    # 5. rebuild signals
+    # 6. rebuild signals
     print(f'> preprocess.py : Reconstructing signals . . .')
     pp_signals = pywt.waverec(coeffs, mother_wavelet).astype(np.int8)
 
-    # 6. save rebuilt preprocessed signals
+    # 7. roll signals to align phases
+    for i, (signal, roll_offset) in enumerate(zip(pp_signals, roll_offsets)):
+        pp_signals[i, :] = np.roll(signal, roll_offset)
+
+    # 8. save rebuilt preprocessed signals
     print(f'> preprocess.py : Saving preprocessed signals . . .')
     np.save(f'{save_dir_relative_path}/{preprocessed_name}/{preprocessed_name}{chunk_suffix}', pp_signals)
 
@@ -88,10 +104,11 @@ def preprocess(
         num_high_freq_levels,
         save_dir_relative_path,
         preprocessed_name,
+        align_phase,
         num_workers,
 ):
     '''
-    Preprocess raw signal data - denoising
+    Preprocess raw signal data
     
     :param raw_chunked_signal_relative_path: relative path to chunked raw signal directory to preprocess each chunk
     :param mother_wavelet: wavelet family for the DWT
@@ -104,6 +121,7 @@ def preprocess(
         freq levels until 'num_low_freq_levels' will be considered
     :param save_dir_relative_path: relative path to directory where preprocessed signals will be saved
     :param preprocessed_name: name for preprocessed files
+    :param align_phase: if True will align shift all waves to start at phase zero, then pi/2 (pos amp), zero ...
     :param num_workers: number of workers for multiprocess. If None, will equal mp.cpu_count()
     :return:
     '''
@@ -130,6 +148,7 @@ def preprocess(
                 num_low_freq_levels,
                 num_high_freq_levels,
                 threshold_method,
+                align_phase,
                 save_dir_relative_path,
                 preprocessed_name,
             )
@@ -147,7 +166,7 @@ def preprocess(
 
 if __name__ == '__main__':
 
-    dataset = 'test'
+    dataset = 'train'
 
     preprocess(
         raw_chunked_signal_relative_path=f'../data/{dataset}_chunks',
@@ -156,8 +175,9 @@ if __name__ == '__main__':
         threshold_value_method='mad',
         threshold_method='hard',
         num_low_freq_levels=4,
-        num_high_freq_levels=None,
+        num_high_freq_levels=2,
         save_dir_relative_path='../preprocessed_data',
-        preprocessed_name=f'pp_{dataset}_db20',
-        num_workers=4,
+        preprocessed_name=f'pp_{dataset}_db20_detail_2',
+        align_phase=True,
+        num_workers=5,
     )
