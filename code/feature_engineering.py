@@ -5,8 +5,9 @@ Generate custom features from chunked preprocessed signal data
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
-import tqdm, glob, time, gc, pickle
+import tqdm, glob, time, pickle, re
 from scipy.signal import find_peaks
+from scipy.stats import skew
 
 def atomic_worker(args):
 
@@ -26,7 +27,50 @@ def atomic_worker(args):
     '''
     if compute_feats['base-feats']:
 
-        peak_ixs, peak_props = find_peaks(signals[0,:], height=2)
+        # Feature names
+
+        base_feats_names = [
+            'num_peaks',
+            'mean_height',
+            'median_height',
+            'std_height',
+            'mean_prominence',
+            'median_prominence',
+            'std_prominence',
+        ]
+
+        feat_names.extend(base_feats_names)
+        num_base_feats = len(base_feats_names)
+
+        # Feature array
+
+        base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
+
+        for i,signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
+
+            # Extract peak properties
+            peak_ixs, peak_props = find_peaks(signal, height=0.1, prominence=0.1, wlen=5000)
+
+            peak_heights = peak_props['peak_heights']
+            peak_prominences = peak_props['prominences']
+
+            # Compute feats
+            feat_list = [
+                peak_heights.size,
+
+                np.mean(peak_heights),
+                np.median(peak_heights),
+                np.std(peak_heights),
+
+                np.mean(peak_prominences),
+                np.median(peak_prominences),
+                np.std(peak_prominences),
+            ]
+            for k, feat in enumerate(feat_list):
+                base_feats_array[i, k] = feat
+
+
+        feat_arrays.append(base_feats_array)
 
     '''
     Aggregate all feats and return as df
@@ -55,7 +99,11 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
     np.warnings.filterwarnings('ignore')
 
     # get sorted paths to all pp signal chunks
-    chunk_paths = sorted(glob.glob(preprocessed_signals_dir + '/*'))
+    chunk_paths = glob.glob(preprocessed_signals_dir + '/*') # unsorted paths
+    chunk_suffixes = [re.search('_\d+\.npy', chunk_name).group() for chunk_name in chunk_paths] # get suffixes
+    chunk_numbers = np.array([int(suffix[1:-4]) for suffix in chunk_suffixes]) # grab number only from each suffix
+    arg_sort = np.argsort(chunk_numbers) # get correct order
+    chunk_paths = [chunk_paths[i] for i in arg_sort] # apply to path list to put it in correct order
 
     # setup atomic args
     atomic_args = [(cp, compute_feats) for cp in chunk_paths]
@@ -89,7 +137,7 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v1_jan14',
+    'base-feats': 'base-feats_v4_jan15',
 }
 
 for ft_name, file_name in feats_to_gen.items():

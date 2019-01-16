@@ -8,3 +8,6 @@ data/*
 data/.dir.txt
 
 notebooks/.ipynb_check*
+notebooks/*.html
+
+code/__py*

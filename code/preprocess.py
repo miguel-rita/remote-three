@@ -159,5 +159,5 @@ if __name__ == '__main__':
         num_high_freq_levels=None,
         save_dir_relative_path='../preprocessed_data',
         preprocessed_name=f'pp_{dataset}_db20',
-        num_workers=None,
+        num_workers=4,
     )
