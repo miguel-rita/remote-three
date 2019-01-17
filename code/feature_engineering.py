@@ -51,7 +51,6 @@ def atomic_worker(args):
             peak_ixs, peak_props = find_peaks(signal, height=0.1, prominence=0.1, wlen=5000)
 
             peak_heights = peak_props['peak_heights']
-            peak_prominences = peak_props['prominences']
 
             # Compute feats
             feat_list = [
