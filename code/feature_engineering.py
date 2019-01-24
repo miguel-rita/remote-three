@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import multiprocessing as mp
 import tqdm, glob, time, pickle, re
-from scipy.signal import find_peaks
-from scipy.stats import skew
+from itertools import product
+from false_pos_suppression import fps
 
 def atomic_worker(args):
 
@@ -28,50 +28,133 @@ def atomic_worker(args):
     if compute_feats['base-feats']:
 
         # Feature names
-
         base_feats_names = [
             'num_peaks',
             'mean_height',
-            'median_height',
             'std_height',
-            'max_height',
-            'min_height',
+            'mean_width',
+            'std_width',
         ]
 
-        feat_names.extend(base_feats_names)
-        num_base_feats = len(base_feats_names)
+        # FPS params
+        ratio_ranges = [0.25]
+        max_distances = [30]
+        rel_heights = [0.1]
 
-        # Feature array
+        for ratio_range, max_distance, rel_height in product(ratio_ranges, max_distances, rel_heights):
 
-        base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
+            suffix = f'_rr{ratio_range:.2f}_md{max_distance:d}_rl{rel_height:.2f}'
+            feat_names.extend([f'{name}{suffix}' for name in base_feats_names])
+            num_base_feats = len(base_feats_names)
 
-        for i,signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
+            # Feature array
+            base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
 
-            # Extract peak properties
-            peak_ixs, peak_props = find_peaks(signal, height=0.1, prominence=0.1, wlen=5000)
+            for i, signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
 
-            peak_heights = peak_props['peak_heights']
+                # Extract peak properties
+                peak_heights, peak_widths = fps(
+                    signal=signal,
+                    min_height=4,
+                    max_height=40,
+                    ratio_range=ratio_range,
+                    max_distance=max_distance,
+                    clean_distance=500,
+                    rel_height=rel_height,
+                )
 
-            # Compute feats
-            feat_list = [
-                peak_heights.size,
+                # Compute feats
+                feat_list = [
+                    peak_heights.size,
 
-                np.mean(peak_heights),
-                np.median(peak_heights),
-                np.std(peak_heights),
-                np.max(peak_heights),
-                np.min(peak_heights),
-            ]
-            for k, feat in enumerate(feat_list):
-                base_feats_array[i, k] = feat
+                    np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
+                    np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
 
+                    np.mean(peak_widths) if len(peak_widths) != 0 else np.nan,
+                    np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
+                ]
+                for k, feat in enumerate(feat_list):
+                    base_feats_array[i, k] = feat
 
-        feat_arrays.append(base_feats_array)
+            feat_arrays.append(base_feats_array)
+
+    '''
+    Quarter features
+    '''
+    if compute_feats['quarter-feats']:
+
+        # Split each signal in 'num_slices'
+        num_slices = 4
+        slice_size = int(signals.shape[1] / num_slices)
+
+        # Feature names
+        quarter_feats_names = [
+            'cross_num_peaks',
+            'cross_mean_height',
+            'cross_std_height',
+            'cross_mean_width',
+            'cross_std_width',
+        ]
+        feat_names.extend(quarter_feats_names)
+
+        num_quarter_feats = len(quarter_feats_names)
+
+        quarter_arrays = [] # to collect feats for each signal quarter
+
+        for signal_slice_num in range(num_slices):
+
+            # Feature array
+            quarter_feats_array = np.zeros(shape=(signals.shape[0], num_quarter_feats))
+
+            for i, signal in tqdm.tqdm(enumerate(
+                    signals[:,signal_slice_num*slice_size:(signal_slice_num+1)*slice_size]
+            ), total=signals.shape[0]):
+
+                # Extract peak properties
+                peak_heights, peak_widths = fps(
+                    signal=signal,
+                    min_height=2,
+                    max_height=20,
+                    ratio_range=0.25,
+                    max_distance=30,
+                    clean_distance=500,
+                    rel_height=0.1
+                )
+
+                # Compute feats
+                feat_list = [
+                    peak_heights.size,
+
+                    np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
+                    np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
+
+                    np.mean(peak_widths) if len(peak_widths) != 0 else np.nan,
+                    # np.max(peak_widths) if len(peak_widths) != 0 else np.nan,
+                    np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
+                ]
+
+                for k, feat in enumerate(feat_list):
+                    quarter_feats_array[i, k] = feat
+
+                quarter_arrays.append(quarter_feats_array)
+
+        # Compute std across quarters for all base features
+
+        quarter_feats = np.hstack(quarter_arrays)
+
+        cross_quarter_feats_array = np.zeros(shape=(signals.shape[0], num_quarter_feats))
+
+        for col in range(num_quarter_feats):
+            cross_quarter_feats_array[:, col] = np.nanstd(
+                a=quarter_feats[:, col::num_quarter_feats],
+                axis=1,
+            )
+
+        feat_arrays.append(cross_quarter_feats_array)
 
     '''
     Aggregate all feats and return as df
     '''
-
     # Build final pandas dataframe
     df = pd.DataFrame(
         data=np.hstack(feat_arrays),
@@ -79,7 +162,6 @@ def atomic_worker(args):
     )
 
     return df
-
 
 def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
     '''
@@ -125,15 +207,17 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
         pickle.dump(feat_list, f2, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-dataset = 'pp_train_db20'
+dataset = 'pp_test_db20'
 st = time.time()
 
 compute_feats_template = {
     'base-feats': bool(0),
+    'quarter-feats': bool(0),
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v5_jan16',
+    'base-feats': 'base-feats_v13_v2',
+    # 'quarter-feats': 'quarter-feats_v12',
 }
 
 for ft_name, file_name in feats_to_gen.items():

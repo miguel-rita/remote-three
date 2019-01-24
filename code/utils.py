@@ -36,6 +36,28 @@ def parquet_chunker(rel_path_to_file, num_chunks, chunk_name):
         ).to_pandas().values.T.astype(np.int8)
         np.save(f'../data/{chunk_name}/{chunk_name}_{i:d}.npy', chunk)
 
+def prepare_datasets(train_feats_list, test_feats_list):
+    '''
+    From a list of paths to precomputed features, loads and prepares train, test and target datasets
+    for use by the models
+
+    :param train_feats_list: list of relative paths to precomputed train feats
+    :param test_feats_list: list of relative paths to precomputed test feats
+    :return: tuple of train df, test df, target 1d np array
+    '''
+
+    # Concatenate train and test feats
+    train_feats_dfs = [pd.read_hdf(path, mode='r') for path in train_feats_list]
+    train_feats_df = pd.concat(train_feats_dfs, axis=1)
+
+    test_feats_dfs = [pd.read_hdf(path, mode='r') for path in test_feats_list]
+    test_feats_df = pd.concat(test_feats_dfs, axis=1)
+
+    # Read metadata target for train set
+    y_target = pd.read_csv('../data/metadata_train.csv')['target'].values
+
+    return train_feats_df, test_feats_df, y_target
+
 def plot_aux_visu():
     # TODO
     pass

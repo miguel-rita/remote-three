@@ -1,4 +1,8 @@
-[] issue of thresholded probas or not for next stack level
+[v] issue of thresholded probas or not for next stack level - no thresholding for stack
 [] unbalanced issue
 [] outlier removal (eg. signals 144-146)
 [] test set EDA
+[] exhaustive recheck of FPS
+
+PRIORITY:
+[] lgbm PD location feature- needed to hit .6?

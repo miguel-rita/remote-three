@@ -50,7 +50,6 @@ class LgbmModel:
         folds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=1)
 
         # Extract numpy arrays for use in lgbm fit method
-
         approved_feats = [feat for feat in list(self.train.columns) if feat not in self.feat_blacklist]
 
         x_all = self.train[approved_feats].values
@@ -93,8 +92,9 @@ class LgbmModel:
             )
 
             # Compute and store oof predictions and MCC, performing custom thresholding
-            y_oof[_eval] = (bst.predict_proba(x_eval)[:,1] >= self.threshold).astype(np.uint8)
-            mcc = matthews_corrcoef(y_eval, y_oof[_eval])
+            y_oof[_eval] = bst.predict_proba(x_eval)[:, 1]
+            y_oof_thresholded = (y_oof[_eval] >= self.threshold).astype(np.uint8)
+            mcc = matthews_corrcoef(y_eval, y_oof_thresholded)
             eval_mccs.append(mcc)
             print(f'> lgbm : Fold MCC : {mcc:.4f}')
 
@@ -123,16 +123,17 @@ class LgbmModel:
             save_importances(imps, filename_='../importances_gain/imps_' + final_name)
 
         if save_preds:
-            np.save(self.output_dir + f'{final_name}_oof.h5', y_oof[:, None])
+            train_preds_df = pd.DataFrame(data=y_oof[:, None], columns=[final_name])
+            train_preds_df.to_hdf(self.output_dir + f'{final_name}_oof.h5', key='w')
 
             # No sense in saving test without train hence indent
             if predict_test:
-                # Threshold test predictions before saving
-                y_test = (y_test >= self.threshold).astype(np.uint8)
-                np.save(self.output_dir + f'{final_name}_test.h5', y_test[:, None])
+                # y_test = (y_test >= self.threshold).astype(np.uint8)
+                test_preds_df = pd.DataFrame(data=y_test[:,None], columns=[final_name])
+                test_preds_df.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
 
         if produce_sub:
-            # Threshold test predictions before saving
+            # Threshold test predictions before saving sub
             y_test = (y_test >= self.threshold).astype(np.uint8)
             save_submission(y_test, sub_name=f'../submissions/{final_name}.csv')
 

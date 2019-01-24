@@ -1,29 +1,7 @@
 import numpy as np
 import pandas as pd
 from lgbm import LgbmModel
-
-def prepare_datasets(train_feats_list, test_feats_list):
-    '''
-    From a list of paths to precomputed features, loads and prepares train, test and target datasets
-    for use by the models
-
-    :param train_feats_list: list of relative paths to precomputed train feats
-    :param test_feats_list: list of relative paths to precomputed test feats
-    :return: tuple of train df, test df, target 1d np array
-    '''
-
-    # Concatenate train and test feats
-    train_feats_dfs = [pd.read_hdf(path, mode='r') for path in train_feats_list]
-    train_feats_df = pd.concat(train_feats_dfs, axis=1)
-
-    test_feats_dfs = [pd.read_hdf(path, mode='r') for path in test_feats_list]
-    test_feats_df = pd.concat(test_feats_dfs, axis=1)
-
-    # Read metadata target for train set
-    y_target = pd.read_csv('../data/metadata_train.csv')['target'].values
-
-    return train_feats_df, test_feats_df, y_target
-
+from utils import prepare_datasets
 
 def main():
 
@@ -33,11 +11,10 @@ def main():
 
     # Select relevant cached features
     train_feats_list = [
-        # '../features/pp_train_db20_base-feats_v5_jan16.h5',
-        '../features/pp_train_db20_base-feats_v4_jan15.h5',
+        '../features/pp_train_db20_base-feats_v13_v2.h5',
     ]
     test_feats_list = [
-        '../features/pp_test_db20_base-feats_v4_jan15.h5',
+        '../features/pp_test_db20_base-feats_v13_v2.h5',
     ]
 
     train, test, y_tgt = prepare_datasets(train_feats_list, test_feats_list)
@@ -47,9 +24,10 @@ def main():
         'lgbm-models'   : bool(1),
     }
 
-    model_name = 'v5_16jan'
+    model_name = 'v13r_v2'
 
-    feat_blacklist = []
+    feat_blacklist = [
+    ]
 
     '''
     LGBM Models
@@ -57,12 +35,12 @@ def main():
     if controls['lgbm-models']:
 
         lgbm_params = {
-            'num_leaves' : 30,
-            'learning_rate': 0.1,
-            'min_child_samples' : 20,
-            'n_estimators': 100,
+            'num_leaves' : 8,
+            'learning_rate': 0.2,
+            'min_child_samples' : 100,
+            'n_estimators': 30,
             'reg_alpha': 0,
-            'reg_lambda': 0,
+            'reg_lambda': 3,
             'bagging_fraction' : 0.8,
             'bagging_freq' : 1,
             'bagging_seed' : 1,
@@ -81,8 +59,8 @@ def main():
 
         lgbm_model_0.fit_predict(
             iteration_name=model_name,
-            predict_test=False,
-            save_preds=False,
+            predict_test=True,
+            save_preds=True,
             produce_sub=False,
             save_imps=True,
             save_aux_visu=False,
