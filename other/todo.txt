@@ -3,6 +3,4 @@
 [] outlier removal (eg. signals 144-146)
 [] test set EDA
 [] exhaustive recheck of FPS
-
-PRIORITY:
-[] lgbm PD location feature- needed to hit .6?
+[] threshold optim

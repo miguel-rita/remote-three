@@ -8,6 +8,7 @@ import multiprocessing as mp
 import tqdm, glob, time, pickle, re
 from itertools import product
 from false_pos_suppression import fps
+import nolds
 
 def atomic_worker(args):
 
@@ -21,7 +22,6 @@ def atomic_worker(args):
     signals = np.load(chunk_path)
     
     # compute desired features
-
     '''
     Base features
     '''
@@ -34,6 +34,10 @@ def atomic_worker(args):
             'std_height',
             'mean_width',
             'std_width',
+            'percen_width_10',
+            'percen_width_90',
+            'std_sym_10',
+            'ptp_sym_10',
         ]
 
         # FPS params
@@ -53,15 +57,19 @@ def atomic_worker(args):
             for i, signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
 
                 # Extract peak properties
-                peak_heights, peak_widths = fps(
+                peak_heights, peak_widths, peak_ixs = fps(
                     signal=signal,
-                    min_height=4,
-                    max_height=40,
+                    min_height=2,
+                    max_height=20,
                     ratio_range=ratio_range,
                     max_distance=max_distance,
                     clean_distance=500,
                     rel_height=rel_height,
                 )
+
+                n_splits = 4
+                total_sum = np.sum(signal)
+                partial_sum_ratios = [np.sum(ssignal)/total_sum*n_splits for ssignal in np.array_split(signal, n_splits)]
 
                 # Compute feats
                 feat_list = [
@@ -72,6 +80,12 @@ def atomic_worker(args):
 
                     np.mean(peak_widths) if len(peak_widths) != 0 else np.nan,
                     np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
+
+                    np.percentile(peak_widths, 10) if len(peak_widths) != 0 else np.nan,
+                    np.percentile(peak_widths, 90) if len(peak_widths) != 0 else np.nan,
+
+                    np.std(partial_sum_ratios),
+                    np.ptp(partial_sum_ratios),
                 ]
                 for k, feat in enumerate(feat_list):
                     base_feats_array[i, k] = feat
@@ -207,7 +221,7 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
         pickle.dump(feat_list, f2, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-dataset = 'pp_test_db20'
+dataset = 'pp_train_db20'
 st = time.time()
 
 compute_feats_template = {
@@ -216,7 +230,7 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v13_v2',
+    'base-feats': 'base-feats_v20',
     # 'quarter-feats': 'quarter-feats_v12',
 }
 

@@ -72,7 +72,7 @@ def fps(signal, min_height, max_height, ratio_range, max_distance, clean_distanc
 
     peak_widths_ = np.hstack([pos_peak_widths_[0], neg_peak_widths_[0]])
 
-    return peak_heights, peak_widths_
+    return peak_heights, peak_widths_, peak_ixs
 
 if __name__ == '__main__':
 

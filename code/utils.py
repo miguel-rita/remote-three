@@ -72,15 +72,30 @@ def save_importances(imps_, filename_):
     plt.savefig(filename_+'.png')
     plt.clf()
 
-def save_submission(y_test, sub_name):
+def save_submission(y_test, sub_name, postprocess, optimize_threshold, default_threshold):
     # Load template sub
     sub = pd.read_csv('../data/sample_submission.csv')
+
+    # Threshold test predictions
+    y_test = (y_test >= default_threshold).astype(np.uint8)
+
+    if postprocess:
+        y_test = postprocess_submission_vector(y_test)
 
     # Insert prediction
     sub['target'] = y_test
 
     # Save back sub
     sub.to_csv(f'../submissions/{sub_name}', index=False)
+
+def postprocess_submission_vector(y_test):
+
+    for line in range(y_test.size):
+        first_phase = line * 3
+        if np.sum(y_test[first_phase:first_phase + 3]) > 1:
+            y_test[first_phase:first_phase + 3] = 1
+
+    return y_test
 
 if __name__ == '__main__':
     parquet_chunker('../data/test.parquet', 200, 'test_chunks')

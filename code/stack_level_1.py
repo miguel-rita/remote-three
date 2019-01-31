@@ -11,10 +11,10 @@ def main():
 
     # Select relevant cached features
     train_feats_list = [
-        '../features/pp_train_db20_base-feats_v13_v2.h5',
+        '../features/pp_train_db20_base-feats_v16.h5',
     ]
     test_feats_list = [
-        '../features/pp_test_db20_base-feats_v13_v2.h5',
+        '../features/pp_test_db20_base-feats_v16.h5',
     ]
 
     train, test, y_tgt = prepare_datasets(train_feats_list, test_feats_list)
@@ -24,9 +24,12 @@ def main():
         'lgbm-models'   : bool(1),
     }
 
-    model_name = 'v13r_v2'
+    model_name = 'v21'
 
     feat_blacklist = [
+        'mean_width_rr0.25_md30_rl0.10',
+        # 'std_sym_10_rr0.25_md30_rl0.10',
+        # 'percen_width_90_rr0.25_md30_rl0.10',
     ]
 
     '''
@@ -54,13 +57,17 @@ def main():
             y_tgt=y_tgt,
             output_dir='../level_1_preds/',
             fit_params=lgbm_params,
-            feat_blacklist=feat_blacklist
+            sample_weight=1.5,
+            default_threshold=0.5,
+            optimize_threshold=True,
+            postprocess_sub=True,
+            feat_blacklist=feat_blacklist,
         )
 
         lgbm_model_0.fit_predict(
             iteration_name=model_name,
-            predict_test=True,
-            save_preds=True,
+            predict_test=False,
+            save_preds=False,
             produce_sub=False,
             save_imps=True,
             save_aux_visu=False,

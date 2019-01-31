@@ -5,7 +5,7 @@ import lightgbm as lgb
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import matthews_corrcoef
-from utils import plot_aux_visu, save_importances, save_submission
+from utils import plot_aux_visu, save_importances, save_submission, postprocess_submission_vector
 
 '''
 LGBM Class definition
@@ -14,7 +14,8 @@ LGBM Class definition
 class LgbmModel:
 
     # Constructor
-    def __init__(self, train, test, y_tgt, output_dir, fit_params, feat_blacklist):
+    def __init__(self, train, test, y_tgt, output_dir, fit_params, sample_weight, default_threshold,
+                 optimize_threshold, postprocess_sub, feat_blacklist):
 
         # dataset
         self.train = train
@@ -26,7 +27,13 @@ class LgbmModel:
         self.fit_params = fit_params
         self.feat_blacklist = feat_blacklist
 
-        self.threshold = 0.5
+        self.default_threshold = default_threshold
+        self.optimize_threshold = optimize_threshold
+        self.postprocess_sub = postprocess_sub
+
+        # Initialize sample weight
+        self.sample_weight = np.ones(shape=self.y_tgt.shape)
+        self.sample_weight[self.y_tgt == 1] = sample_weight
 
     def fit_predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_imps=True,
                     save_aux_visu=False):
@@ -62,6 +69,7 @@ class LgbmModel:
 
             # Setup fold data
             x_train, y_train = x_all[_train], self.y_tgt[_train]
+            sample_weight = self.sample_weight[_train]
             x_eval, y_eval = x_all[_eval], self.y_tgt[_eval]
 
             # Setup binary LGBM
@@ -85,6 +93,7 @@ class LgbmModel:
             bst.fit(
                 X=x_train,
                 y=y_train,
+                sample_weight=sample_weight,
                 eval_set=[(x_eval, y_eval)],
                 eval_names=['\neval_set'],
                 early_stopping_rounds=15,
@@ -93,7 +102,7 @@ class LgbmModel:
 
             # Compute and store oof predictions and MCC, performing custom thresholding
             y_oof[_eval] = bst.predict_proba(x_eval)[:, 1]
-            y_oof_thresholded = (y_oof[_eval] >= self.threshold).astype(np.uint8)
+            y_oof_thresholded = (y_oof[_eval] >= self.default_threshold).astype(np.uint8)
             mcc = matthews_corrcoef(y_eval, y_oof_thresholded)
             eval_mccs.append(mcc)
             print(f'> lgbm : Fold MCC : {mcc:.4f}')
@@ -117,7 +126,14 @@ class LgbmModel:
         Output wrap-up : save importances, predictions (oof and test), submission and others
         '''
 
-        final_name = f'lgbm_{iteration_name}_{np.mean(eval_mccs):.4f}'
+        y_oof_thresholded = (y_oof >= self.default_threshold).astype(np.uint8)
+
+        if self.postprocess_sub:
+            y_oof_thresholded = postprocess_submission_vector(y_oof_thresholded)
+
+        final_metric = matthews_corrcoef(self.y_tgt, y_oof_thresholded)
+        print(f'> lgbm : MCC for OOF predictions : {final_metric:.4f}')
+        final_name = f'lgbm_{iteration_name}_{final_metric:.4f}'
 
         if save_imps:
             save_importances(imps, filename_='../importances_gain/imps_' + final_name)
@@ -133,11 +149,17 @@ class LgbmModel:
                 test_preds_df.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
 
         if produce_sub:
-            # Threshold test predictions before saving sub
-            y_test = (y_test >= self.threshold).astype(np.uint8)
-            save_submission(y_test, sub_name=f'../submissions/{final_name}.csv')
+            save_submission(
+                y_test,
+                sub_name=f'../submissions/{final_name}.csv',
+                postprocess=self.postprocess_sub,
+                optimize_threshold=self.optimize_threshold,
+                default_threshold=self.default_threshold,
+            )
 
         if save_aux_visu:
             if False:
                 plot_aux_visu()
             pass
+
+        return final_metric
