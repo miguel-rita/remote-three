@@ -38,13 +38,13 @@ def main():
     if controls['lgbm-models']:
 
         lgbm_params = {
-            'num_leaves' : 8,
+            'num_leaves' : 6,
             'learning_rate': 0.2,
             'min_child_samples' : 100,
-            'n_estimators': 30,
+            'n_estimators': 15,
             'reg_alpha': 0,
-            'reg_lambda': 3,
-            'bagging_fraction' : 0.8,
+            'reg_lambda': 5,
+            'bagging_fraction' : 0.7,
             'bagging_freq' : 1,
             'bagging_seed' : 1,
             'silent': 1,
@@ -66,9 +66,9 @@ def main():
 
         lgbm_model_0.fit_predict(
             iteration_name=model_name,
-            predict_test=False,
+            predict_test=True,
             save_preds=False,
-            produce_sub=False,
+            produce_sub=True,
             save_imps=True,
             save_aux_visu=False,
         )
