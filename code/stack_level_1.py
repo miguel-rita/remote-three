@@ -24,12 +24,15 @@ def main():
         'lgbm-models'   : bool(1),
     }
 
-    model_name = 'v21'
+    model_name = 'v23'
 
     feat_blacklist = [
         'mean_width_rr0.25_md30_rl0.10',
-        # 'std_sym_10_rr0.25_md30_rl0.10',
+        'mean_height_rr0.25_md30_rl0.10',
+        'std_height_rr0.25_md30_rl0.10',
+        # 'std_width_rr0.25_md30_rl0.10',
         # 'percen_width_90_rr0.25_md30_rl0.10',
+        # 'percen_width_10_rr0.25_md30_rl0.10',
     ]
 
     '''
@@ -38,8 +41,8 @@ def main():
     if controls['lgbm-models']:
 
         lgbm_params = {
-            'num_leaves' : 6,
-            'learning_rate': 0.2,
+            'num_leaves' : 4,
+            'learning_rate': 0.4,
             'min_child_samples' : 100,
             'n_estimators': 15,
             'reg_alpha': 0,

@@ -51,6 +51,7 @@ class MlpModel:
 
         self.models = []
         self.fold_val_losses = []
+        self.fold_mccs = []
 
         '''
         Input scaling and additional preprocessing for nn
@@ -77,7 +78,7 @@ class MlpModel:
     # Loss-related methods
     def custom_cross_entropy_loss(self, y_true, y_pred):
         '''
-        Multilabel binary CE loss
+        Multilabel binary CE loss - WIP TODO
         '''
 
         phase_losses = np.zeros(3)
@@ -146,16 +147,14 @@ class MlpModel:
         '''
 
         # CV cycle collectors
-        nns = []
-        fold_val_losses = []
         y_oof = np.zeros(self.y_tgt.shape)
 
-        # Setup stratified CV
+        # Setup stratified CV, by number of phases with PD - hence the np.sum(self.y_tgt)
         num_folds = 5
         folds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=1)
 
-        for i, (_train, _eval) in enumerate(folds.split(self.y_tgt, self.y_tgt)):
-            print(f'>   nn : Computing fold number {i} . . .')
+        for i, (_train, _eval) in enumerate(folds.split(self.y_tgt[:,0], np.sum(self.y_tgt, axis=1))):
+            print(f'>   nn : Fitting fold number {i} . . .')
 
             # Setup fold data
             x_train, y_train = self.x_all[_train], self.y_tgt[_train]
@@ -172,7 +171,7 @@ class MlpModel:
             # Compile model
             nn.compile(
                 optimizer=optimizers.SGD(lr=params['lr'], momentum=0, decay=0, nesterov=False),
-                loss=self.custom_cross_entropy_loss,
+                loss=binary_crossentropy,
             )
 
             '''
@@ -202,15 +201,25 @@ class MlpModel:
 
             self.models.append(nn)
 
-            y_oof[_eval, :] = nn.predict(x_eval, batch_size=1000)
-            val_loss = self.weighted_average_crossentropy_numpy(y_eval, y_oof[_eval, :])
+            y_oof[_eval, :] = nn.predict(x_eval, batch_size=50000)
+
+            # Calc fold oof validation loss
+            val_loss = binary_crossentropy(y_eval, y_oof[_eval, :])
             self.fold_val_losses.append(val_loss)
             print(f'>    nn : Fold val loss : {val_loss:.4f}')
 
-        print('>    nn : Remote CV results : ')
-        print(pd.Series(self.fold_val_losses).describe())
+            # Calc fold oof MCC
+            y_oof_1d = np.reshape(y_oof[_eval, :], newshape=(-1,)) # unroll oof preds for MCC
+            y_tgt_1d = np.reshape(self.y_tgt[_eval, :], newshape=(-1,)) # unroll tgt for MCC
+            y_oof_1d_thresholded = (y_oof_1d >= self.default_threshold).astype(np.uint8) # threshold
+            mcc_oof = matthews_corrcoef(y_tgt_1d, y_oof_1d_thresholded)
+            self.fold_mccs.append(mcc_oof)
+            print(f'>    nn : Fold MCC : {mcc_oof:.4f}')
 
-    def predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_confusion=True):
+        print('>    nn : CV results : ')
+        print(pd.Series(self.fold_mccs).describe())
+
+    def predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_aux_visu=False):
 
         if not self.models:
             raise ValueError('Must fit or load models before predicting')
@@ -222,16 +231,18 @@ class MlpModel:
         Setup CV
         '''
 
-        y_oof = np.zeros(self.y_tgt_oh.shape)
         if predict_test:
             y_test = np.zeros((self.test.shape[0], self.weights.size))
 
-        # Setup stratified CV
+        # CV cycle collectors
+        y_oof = np.zeros(self.y_tgt.shape)
+
+        # Setup stratified CV, by number of phases with PD - hence the np.sum(self.y_tgt)
         num_folds = 5
         folds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=1)
 
-        for i, (_train, _eval) in enumerate(folds.split(self.y_tgt, self.y_tgt)):
-            print(f'>   nn : Predicting on fold number {i} . . .')
+        for i, (_train, _eval) in enumerate(folds.split(self.y_tgt[:, 0], np.sum(self.y_tgt, axis=1))):
+            print(f'>   nn : Predicting fold number {i} . . .')
 
             # Setup fold data
             x_eval, y_eval = self.x_all[_eval], self.y_tgt_oh[_eval]

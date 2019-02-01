@@ -35,9 +35,6 @@ def atomic_worker(args):
             'mean_width',
             'std_width',
             'percen_width_10',
-            'percen_width_90',
-            'std_sym_10',
-            'ptp_sym_10',
         ]
 
         # FPS params

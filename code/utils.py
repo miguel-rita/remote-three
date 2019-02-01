@@ -90,10 +90,12 @@ def save_submission(y_test, sub_name, postprocess, optimize_threshold, default_t
 
 def postprocess_submission_vector(y_test):
 
-    for line in range(y_test.size):
-        first_phase = line * 3
-        if np.sum(y_test[first_phase:first_phase + 3]) > 1:
-            y_test[first_phase:first_phase + 3] = 1
+    y_test = np.reshape(y_test, (int(y_test.size/3), -1))
+
+    y_test[np.sum(y_test, axis=1) > 1] = 1
+    y_test[np.sum(y_test, axis=1) <= 1] = 0
+
+    y_test = np.reshape(y_test, (-1,))
 
     return y_test
 

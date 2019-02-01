@@ -127,13 +127,17 @@ class LgbmModel:
         '''
 
         y_oof_thresholded = (y_oof >= self.default_threshold).astype(np.uint8)
-
-        if self.postprocess_sub:
-            y_oof_thresholded = postprocess_submission_vector(y_oof_thresholded)
+        y_oof_thresholded_pp = postprocess_submission_vector(np.copy(y_oof_thresholded))
 
         final_metric = matthews_corrcoef(self.y_tgt, y_oof_thresholded)
-        print(f'> lgbm : MCC for OOF predictions : {final_metric:.4f}')
-        final_name = f'lgbm_{iteration_name}_{final_metric:.4f}'
+        final_metric_pp = matthews_corrcoef(self.y_tgt, y_oof_thresholded_pp)
+        print(f'> lgbm : MCC for OOF predictions : {final_metric_pp:.4f} (pp)')
+        print(f'> lgbm : MCC for OOF predictions : {final_metric:.4f} (no pp)')
+
+        if self.postprocess_sub:
+            final_name = f'lgbm_{iteration_name}_{final_metric_pp:.4f}_pp'
+        else:
+            final_name = f'lgbm_{iteration_name}_{final_metric:.4f}'
 
         if save_imps:
             save_importances(imps, filename_='../importances_gain/imps_' + final_name)
