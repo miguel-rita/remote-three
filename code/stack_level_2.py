@@ -12,14 +12,12 @@ def main():
 
     # Select relevant cached features
     level_1_train_feats_list = [
-        # '../features/pp_train_db20_base-feats_v13.h5',
-        '../level_1_preds/lgbm_v13r_0.6139_oof.h5',
-        '../level_1_preds/lgbm_v13r_v2_0.5567_oof.h5'
+        '../level_1_preds/lgbm_v23_0.6609_pp_oof.h5',
+        '../level_1_preds/mlp_v23_single_0.6413_oof.h5',
     ]
     level_1_test_feats_list = [
-        # '../features/pp_test_db20_base-feats_v13.h5',
-        '../level_1_preds/lgbm_v13r_0.6139_test.h5',
-        '../level_1_preds/lgbm_v13r_v2_0.5567_test.h5'
+        '../level_1_preds/lgbm_v23_0.6609_pp_test.h5',
+        '../level_1_preds/mlp_v23_single_0.6413_test.h5'
     ]
 
     train, test, y_tgt = prepare_datasets(level_1_train_feats_list, level_1_test_feats_list)
@@ -29,7 +27,7 @@ def main():
         'lgbm-models': bool(1),
     }
 
-    model_name = 'stack_v1'
+    model_name = 'stack_V1_v23'
 
     feat_blacklist = [
     ]
@@ -38,14 +36,15 @@ def main():
     LGBM Models
     '''
     if controls['lgbm-models']:
+
         lgbm_params = {
             'num_leaves' : 2,
             'learning_rate': 0.25,
-            'min_child_samples' : 60,
-            'n_estimators': 30,
+            'min_child_samples' : 100,
+            'n_estimators': 20,
             'reg_alpha': 0,
-            'reg_lambda': 3,
-            'bagging_fraction' : 0.8,
+            'reg_lambda': 5,
+            'bagging_fraction' : 0.7,
             'bagging_freq' : 1,
             'bagging_seed' : 1,
             'silent': 1,
@@ -56,15 +55,19 @@ def main():
             train=train,
             test=test,
             y_tgt=y_tgt,
-            output_dir='../level_1_preds/',
+            output_dir='../level_2_preds/',
             fit_params=lgbm_params,
-            feat_blacklist=feat_blacklist
+            sample_weight=1,
+            default_threshold=0.5,
+            optimize_threshold=True,
+            postprocess_sub=True,
+            feat_blacklist=feat_blacklist,
         )
 
         lgbm_model_0.fit_predict(
             iteration_name=model_name,
             predict_test=False,
-            save_preds=False,
+            save_preds=True,
             produce_sub=True,
             save_imps=True,
             save_aux_visu=False,

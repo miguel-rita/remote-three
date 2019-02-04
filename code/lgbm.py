@@ -4,7 +4,7 @@ import numpy as np
 import lightgbm as lgb
 
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import matthews_corrcoef
+from sklearn.metrics import matthews_corrcoef, precision_score, recall_score
 from utils import plot_aux_visu, save_importances, save_submission, postprocess_submission_vector
 
 '''
@@ -34,6 +34,11 @@ class LgbmModel:
         # Initialize sample weight
         self.sample_weight = np.ones(shape=self.y_tgt.shape)
         self.sample_weight[self.y_tgt == 1] = sample_weight
+
+        # TODO - Relabel analysis
+        # old_tgts = np.reshape(self.y_tgt, (int(self.y_tgt.size/3),-1))
+        # old_tgts[np.sum(old_tgts, axis=1)>=1] = 1
+        # self.y_tgt = np.reshape(old_tgts, (-1,))
 
     def fit_predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_imps=True,
                     save_aux_visu=False):
@@ -127,12 +132,20 @@ class LgbmModel:
         '''
 
         y_oof_thresholded = (y_oof >= self.default_threshold).astype(np.uint8)
-        y_oof_thresholded_pp = postprocess_submission_vector(np.copy(y_oof_thresholded))
+        y_oof_thresholded_pp = postprocess_submission_vector(np.copy(y_oof_thresholded), y_oof)
 
         final_metric = matthews_corrcoef(self.y_tgt, y_oof_thresholded)
+        precision_metric = precision_score(self.y_tgt, y_oof_thresholded)
+        recall_metric = recall_score(self.y_tgt, y_oof_thresholded)
         final_metric_pp = matthews_corrcoef(self.y_tgt, y_oof_thresholded_pp)
-        print(f'> lgbm : MCC for OOF predictions : {final_metric_pp:.4f} (pp)')
-        print(f'> lgbm : MCC for OOF predictions : {final_metric:.4f} (no pp)')
+        precision_metric_pp = precision_score(self.y_tgt, y_oof_thresholded_pp)
+        recall_metric_pp = recall_score(self.y_tgt, y_oof_thresholded_pp)
+        print(f'> lgbm : MCC for OOF predictions       : {final_metric_pp:.4f} (pp)')
+        print(f'> lgbm : Precision for OOF predictions : {precision_metric_pp:.4f} (pp)')
+        print(f'> lgbm : Recall for OOF predictions    : {recall_metric_pp:.4f} (pp)\n')
+        print(f'> lgbm : MCC for OOF predictions       : {final_metric:.4f} (no pp)')
+        print(f'> lgbm : Precision for OOF predictions : {precision_metric:.4f} (no pp)')
+        print(f'> lgbm : Recall for OOF predictions    : {recall_metric:.4f} (no pp)')
 
         if self.postprocess_sub:
             final_name = f'lgbm_{iteration_name}_{final_metric_pp:.4f}_pp'
@@ -148,7 +161,6 @@ class LgbmModel:
 
             # No sense in saving test without train hence indent
             if predict_test:
-                # y_test = (y_test >= self.threshold).astype(np.uint8)
                 test_preds_df = pd.DataFrame(data=y_test[:,None], columns=[final_name])
                 test_preds_df.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
 
@@ -166,4 +178,3 @@ class LgbmModel:
                 plot_aux_visu()
             pass
 
-        return final_metric

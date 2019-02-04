@@ -8,7 +8,6 @@ import multiprocessing as mp
 import tqdm, glob, time, pickle, re
 from itertools import product
 from false_pos_suppression import fps
-import nolds
 
 def atomic_worker(args):
 
@@ -32,9 +31,10 @@ def atomic_worker(args):
             'num_peaks',
             'mean_height',
             'std_height',
-            'mean_width',
             'std_width',
             'percen_width_10',
+            'percen_width_90',
+            'assymetry',
         ]
 
         # FPS params
@@ -64,10 +64,6 @@ def atomic_worker(args):
                     rel_height=rel_height,
                 )
 
-                n_splits = 4
-                total_sum = np.sum(signal)
-                partial_sum_ratios = [np.sum(ssignal)/total_sum*n_splits for ssignal in np.array_split(signal, n_splits)]
-
                 # Compute feats
                 feat_list = [
                     peak_heights.size,
@@ -75,14 +71,13 @@ def atomic_worker(args):
                     np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
                     np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
 
-                    np.mean(peak_widths) if len(peak_widths) != 0 else np.nan,
                     np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
 
                     np.percentile(peak_widths, 10) if len(peak_widths) != 0 else np.nan,
                     np.percentile(peak_widths, 90) if len(peak_widths) != 0 else np.nan,
 
-                    np.std(partial_sum_ratios),
-                    np.ptp(partial_sum_ratios),
+                    np.abs(np.mean(peak_heights[peak_heights > 0]) / np.mean(peak_heights[peak_heights > 0])) if len(
+                        peak_heights) != 0 else np.nan,
                 ]
                 for k, feat in enumerate(feat_list):
                     base_feats_array[i, k] = feat
@@ -90,46 +85,40 @@ def atomic_worker(args):
             feat_arrays.append(base_feats_array)
 
     '''
-    Quarter features
+    Nofps features
     '''
-    if compute_feats['quarter-feats']:
-
-        # Split each signal in 'num_slices'
-        num_slices = 4
-        slice_size = int(signals.shape[1] / num_slices)
+    if compute_feats['nofps-feats']:
 
         # Feature names
-        quarter_feats_names = [
-            'cross_num_peaks',
-            'cross_mean_height',
-            'cross_std_height',
-            'cross_mean_width',
-            'cross_std_width',
+        base_feats_names = [
+            'a'
         ]
-        feat_names.extend(quarter_feats_names)
 
-        num_quarter_feats = len(quarter_feats_names)
+        # FPS params
+        ratio_ranges = [0.25]
+        max_distances = [30]
+        rel_heights = [0.1]
 
-        quarter_arrays = [] # to collect feats for each signal quarter
+        for ratio_range, max_distance, rel_height in product(ratio_ranges, max_distances, rel_heights):
 
-        for signal_slice_num in range(num_slices):
+            suffix = f'_rr{ratio_range:.2f}_md{max_distance:d}_rl{rel_height:.2f}'
+            feat_names.extend([f'{name}{suffix}' for name in base_feats_names])
+            num_base_feats = len(base_feats_names)
 
             # Feature array
-            quarter_feats_array = np.zeros(shape=(signals.shape[0], num_quarter_feats))
+            base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
 
-            for i, signal in tqdm.tqdm(enumerate(
-                    signals[:,signal_slice_num*slice_size:(signal_slice_num+1)*slice_size]
-            ), total=signals.shape[0]):
+            for i, signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
 
                 # Extract peak properties
-                peak_heights, peak_widths = fps(
+                peak_heights, peak_widths, peak_ixs = fps(
                     signal=signal,
                     min_height=2,
                     max_height=20,
-                    ratio_range=0.25,
-                    max_distance=30,
+                    ratio_range=ratio_range,
+                    max_distance=max_distance,
                     clean_distance=500,
-                    rel_height=0.1
+                    rel_height=rel_height,
                 )
 
                 # Compute feats
@@ -139,29 +128,15 @@ def atomic_worker(args):
                     np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
                     np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
 
-                    np.mean(peak_widths) if len(peak_widths) != 0 else np.nan,
-                    # np.max(peak_widths) if len(peak_widths) != 0 else np.nan,
                     np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
+
+                    np.percentile(peak_widths, 10) if len(peak_widths) != 0 else np.nan,
+                    np.percentile(peak_widths, 90) if len(peak_widths) != 0 else np.nan,
                 ]
-
                 for k, feat in enumerate(feat_list):
-                    quarter_feats_array[i, k] = feat
+                    base_feats_array[i, k] = feat
 
-                quarter_arrays.append(quarter_feats_array)
-
-        # Compute std across quarters for all base features
-
-        quarter_feats = np.hstack(quarter_arrays)
-
-        cross_quarter_feats_array = np.zeros(shape=(signals.shape[0], num_quarter_feats))
-
-        for col in range(num_quarter_feats):
-            cross_quarter_feats_array[:, col] = np.nanstd(
-                a=quarter_feats[:, col::num_quarter_feats],
-                axis=1,
-            )
-
-        feat_arrays.append(cross_quarter_feats_array)
+            feat_arrays.append(base_feats_array)
 
     '''
     Aggregate all feats and return as df
@@ -223,12 +198,12 @@ st = time.time()
 
 compute_feats_template = {
     'base-feats': bool(0),
-    'quarter-feats': bool(0),
+    'nofps-feats': bool(0),
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v20',
-    # 'quarter-feats': 'quarter-feats_v12',
+    'base-feats': 'base-feats_v22',
+    # 'nofps-feats': 'nofps-feats_v21',
 }
 
 for ft_name, file_name in feats_to_gen.items():

@@ -77,10 +77,11 @@ def save_submission(y_test, sub_name, postprocess, optimize_threshold, default_t
     sub = pd.read_csv('../data/sample_submission.csv')
 
     # Threshold test predictions
+    y_test_probas = np.copy(y_test)
     y_test = (y_test >= default_threshold).astype(np.uint8)
 
     if postprocess:
-        y_test = postprocess_submission_vector(y_test)
+        y_test = postprocess_submission_vector(y_test, y_test_probas)
 
     # Insert prediction
     sub['target'] = y_test
@@ -88,12 +89,14 @@ def save_submission(y_test, sub_name, postprocess, optimize_threshold, default_t
     # Save back sub
     sub.to_csv(f'../submissions/{sub_name}', index=False)
 
-def postprocess_submission_vector(y_test):
+def postprocess_submission_vector(y_test, y_test_probas):
 
     y_test = np.reshape(y_test, (int(y_test.size/3), -1))
+    y_test_probas = np.reshape(y_test_probas, (int(y_test_probas.size/3), -1))
 
     y_test[np.sum(y_test, axis=1) > 1] = 1
-    y_test[np.sum(y_test, axis=1) <= 1] = 0
+    y_test[(np.sum(y_test, axis=1) == 1) & (np.sum(y_test_probas, axis=1) > 1.25)] = 1
+    y_test[(np.sum(y_test, axis=1) == 1) & (np.sum(y_test_probas, axis=1) <= 0.75)] = 0
 
     y_test = np.reshape(y_test, (-1,))
 

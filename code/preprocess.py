@@ -177,7 +177,7 @@ if __name__ == '__main__':
         num_low_freq_levels=4,
         num_high_freq_levels=2,
         save_dir_relative_path='../preprocessed_data',
-        preprocessed_name=f'pp_{dataset}_db20_detail_2',
+        preprocessed_name=f'pp_{dataset}_db20_l4h2',
         align_phase=True,
-        num_workers=5,
+        num_workers=8,
     )

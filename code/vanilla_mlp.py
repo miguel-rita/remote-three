@@ -10,11 +10,10 @@ from keras import optimizers, backend as K
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.utils.class_weight import compute_sample_weight
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import matthews_corrcoef
-from utils import plot_aux_visu, save_importances, save_submission, postprocess_submission_vector
+from utils import plot_aux_visu, save_submission
 
 '''
 MLP Class definition
@@ -23,8 +22,7 @@ MLP Class definition
 class MlpModel:
 
     # Constructor
-    def __init__(self, train, test, y_tgt, output_dir, fit_params, sample_weight, default_threshold,
-                 optimize_threshold, postprocess_sub, feat_blacklist):
+    def __init__(self, train, test, y_tgt, sample_weight, output_dir, default_threshold, optimize_threshold):
 
         # Input control
         if train is None:
@@ -38,19 +36,15 @@ class MlpModel:
 
         # other params
         self.output_dir = output_dir
-        self.fit_params = fit_params
-        self.feat_blacklist = feat_blacklist
 
         self.default_threshold = default_threshold
         self.optimize_threshold = optimize_threshold
-        self.postprocess_sub = postprocess_sub
 
         # Initialize sample weight
         self.sample_weight = np.ones(shape=self.y_tgt.shape)
         self.sample_weight[self.y_tgt == 1] = sample_weight
 
         self.models = []
-        self.fold_val_losses = []
         self.fold_mccs = []
 
         '''
@@ -67,7 +61,7 @@ class MlpModel:
 
         if not is_train_only:
             self.test = self.test.replace([np.nan], 0)
-            self.x_test = self.x_test.values
+            self.x_test = self.test.values
             self.x_test = ss.transform(self.x_test)
 
         # Reshape data to learn all 3-phases at once
@@ -95,25 +89,26 @@ class MlpModel:
 
         # Setup save dir
         timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S')
-        mean_loss = np.mean(self.fold_val_losses)
-        model_name += '__' + timestamp + '__' + f'{mean_loss:.4f}'
+        mean_mcc = np.mean(self.fold_mccs)
+        model_name += '__' + timestamp + '__' + f'{mean_mcc:.4f}'
         os.mkdir(os.getcwd() + '/../models/' + model_name)
 
         # Save model
         for i, nn in enumerate(self.models):
             fold_name = f'fold{i:d}'
-            fold_loss = self.fold_val_losses[i]
-            filepath = os.getcwd() + '/../models/' + model_name + '/' + fold_name + f'__{fold_loss:.4f}.h5'
+            fold_mcc = self.fold_mccs[i]
+            filepath = os.getcwd() + '/../models/' + model_name + '/' + fold_name + f'__{fold_mcc:.4f}.h5'
             nn.save(filepath=filepath)
 
     def load(self, models_rel_dir):
         '''
         Load pretrained nets into memory
         '''
-        nn_names = glob.glob(os.getcwd() + '/../' + models_rel_dir + '/*.h5')
+        model_abs_dir = os.getcwd() + '/' + models_rel_dir + '/*.h5'
+        nn_names = glob.glob(model_abs_dir)
         nn_names.sort()
         self.models.extend(
-            [load_model(os.getcwd() + '/../' + models_rel_dir + f'/fold{i}__' + n.split('__')[-1]) for i, n in
+            [load_model(os.getcwd() + '/' + models_rel_dir + f'/fold{i}__' + n.split('__')[-1]) for i, n in
              enumerate(nn_names)])
 
     def build_model(self, layer_dims, dropout_rate, activation='relu'):
@@ -203,11 +198,6 @@ class MlpModel:
 
             y_oof[_eval, :] = nn.predict(x_eval, batch_size=50000)
 
-            # Calc fold oof validation loss
-            val_loss = binary_crossentropy(y_eval, y_oof[_eval, :])
-            self.fold_val_losses.append(val_loss)
-            print(f'>    nn : Fold val loss : {val_loss:.4f}')
-
             # Calc fold oof MCC
             y_oof_1d = np.reshape(y_oof[_eval, :], newshape=(-1,)) # unroll oof preds for MCC
             y_tgt_1d = np.reshape(self.y_tgt[_eval, :], newshape=(-1,)) # unroll tgt for MCC
@@ -232,7 +222,7 @@ class MlpModel:
         '''
 
         if predict_test:
-            y_test = np.zeros((self.test.shape[0], self.weights.size))
+            y_test = np.zeros((self.x_test.shape[0], self.y_tgt.shape[1]))
 
         # CV cycle collectors
         y_oof = np.zeros(self.y_tgt.shape)
@@ -245,40 +235,49 @@ class MlpModel:
             print(f'>   nn : Predicting fold number {i} . . .')
 
             # Setup fold data
-            x_eval, y_eval = self.x_all[_eval], self.y_tgt_oh[_eval]
+            x_eval, y_eval = self.x_all[_eval], self.y_tgt[_eval]
 
-            # Train predictions (oof)
-            y_oof[_eval, :] = self.models[i].predict(x_eval, batch_size=10000)
+            # Predict train oof
+            y_oof[_eval, :] = self.models[i].predict(x_eval, batch_size=50000)
+
+            # Calc fold oof MCC
+            y_oof_1d = np.reshape(y_oof[_eval, :], newshape=(-1,))  # unroll oof preds for MCC
+            y_tgt_1d = np.reshape(self.y_tgt[_eval, :], newshape=(-1,))  # unroll tgt for MCC
+            y_oof_1d_thresholded = (y_oof_1d >= self.default_threshold).astype(np.uint8)  # threshold
+            mcc_oof = matthews_corrcoef(y_tgt_1d, y_oof_1d_thresholded)
+            self.fold_mccs.append(mcc_oof)
+            print(f'>    nn : Fold MCC : {mcc_oof:.4f}')
 
             # Test predictions
             if predict_test:
                 y_test += self.models[i].predict(self.x_test, batch_size=10000) / num_folds
 
-            val_loss = self.weighted_average_crossentropy_numpy(y_eval, y_oof[_eval, :])
-            self.fold_val_losses.append(val_loss)
-            print(f'>   nn : Fold val loss : {val_loss:.4f}')
+        final_name = f'mlp_{iteration_name}_{np.mean(self.fold_mccs):.4f}'
 
-        final_name = f'mlp_{iteration_name}_{np.mean(self.fold_val_losses):.4f}'
-
-        if produce_sub:
-            save_submission(y_test, sub_name=f'./subs/{final_name}.csv', rs_bins=self.test['rs_bin'].values)
-
-        if save_confusion:
-            y_preds = np.argmax(y_oof, axis=1)
-            cm = confusion_matrix(self.y_tgt, y_preds, labels=np.unique(self.y_tgt))
-            plot_confusion_matrix(cm, classes=[str(c) for c in self.class_codes[np.unique(self.y_tgt)]],
-                                  filename_='confusion/confusion_' + final_name, normalize=True)
+        # Reshape train/test preds
+        y_oof_1d = np.reshape(y_oof, newshape=(-1,))
+        if predict_test:
+            y_test_1d = np.reshape(y_test, newshape=(-1,))
 
         if save_preds:
+            train_preds_df = pd.DataFrame(data=y_oof_1d[:, None], columns=[final_name])
+            train_preds_df.to_hdf(self.output_dir + f'{final_name}_oof.h5', key='w')
 
-            class_names = [final_name + '__' + str(c) for c in self.class_codes]
-
-            oof_preds = pd.concat([self.train[['object_id']], pd.DataFrame(y_oof, columns=class_names)], axis=1)
-            oof_preds.to_hdf(self.output_dir + f'{final_name}_oof.h5', key='w')
-
+            # No sense in saving test without train hence indent
             if predict_test:
-                test_preds = pd.concat([self.test[['object_id']], pd.DataFrame(y_test, columns=class_names)], axis=1)
-                test_preds.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
+                test_preds_df = pd.DataFrame(data=y_test_1d[:, None], columns=[final_name])
+                test_preds_df.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
 
-                return oof_preds, test_preds
+        if produce_sub:
+            save_submission(
+                y_test_1d,
+                sub_name=f'../submissions/{final_name}.csv',
+                postprocess=False,
+                optimize_threshold=self.optimize_threshold,
+                default_threshold=self.default_threshold,
+            )
 
+        if save_aux_visu:
+            if False:
+                plot_aux_visu()
+            pass
