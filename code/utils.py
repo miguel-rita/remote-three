@@ -1,9 +1,99 @@
 import numpy as np
 import pandas as pd
-import tqdm, os, re
+import tqdm, os, glob, re
 import pyarrow.parquet as pq
 import matplotlib.pyplot as plt
 import seaborn as sns
+from keras.utils import Sequence
+
+class CNN_Generator(Sequence):
+    '''
+    Generator to handle data for CNN training. Includes signal normalization
+    '''
+
+    def preprocess_signal_batch(self, x_batch, max_abs_height=20):
+        '''
+        Performs a series of preprocessing steps to the signal batch. Currently:
+        1) Remove peaks with abs height > max_abs_height
+        2) Scale by the max_abs_height
+
+        :param x_batch: a n-by-m numpy array containing a batch o signals
+        :return: preprocessed batch
+        '''
+
+        x_batch[np.abs(x_batch) > max_abs_height] = 0
+        x_batch = x_batch.astype(np.float16) / max_abs_height
+        return x_batch
+
+    def __init__(self, chunks_path, labels, chunks_per_batch, chunk_subset=None):
+        '''
+        Init generator (train and test compatible)
+        :param chunks_path: path to folder containing all preprocessed dataset chunks
+        :param labels: np 1d array containg target
+        :param chunks_per_batch: define batch size by number of chunks. Must divide num of chunks exactly
+        :param chunk_subset: (list, optional) if provided, will only consider chunks with number
+            in chunk_subset. Useful to implement cross validation later on
+        '''
+
+        # Get sorted paths to signal chunks
+        chunk_paths = glob.glob(chunks_path + '/*')  # unsorted paths
+        chunk_suffixes = [re.search('_\d+\.npy', chunk_name).group() for chunk_name in chunk_paths]  # get suffixes
+        chunk_numbers = np.array([int(suffix[1:-4]) for suffix in chunk_suffixes])  # grab number only from each suffix
+        arg_sort = np.argsort(chunk_numbers)  # get correct order
+
+        # If we want only a subset of chunks
+        if chunk_subset is not None:
+            sub_arg_sort = np.array([arg for arg in arg_sort if arg in chunk_subset])
+            self.chunk_paths = [chunk_paths[i] for i in sub_arg_sort]
+        else:
+            self.chunk_paths = [chunk_paths[i] for i in arg_sort]
+
+        # One batch will contain chunks_per_batch * signals_per_chunk signals
+        if len(self.chunk_paths) % chunks_per_batch != 0:
+            raise ValueError('CNN_Generator : chunks_per_batch must divide exactly num. of chunks in memory')
+        self.chunks_per_batch = chunks_per_batch
+
+        # Total number of batches
+        self.num_batches = int(len(self.chunk_paths) / self.chunks_per_batch)
+
+        # Get chunk sizes without loading entire chunks - just headers
+        all_chunk_paths = [chunk_paths[i] for i in arg_sort]
+        chunk_sizes = [np.load(cp, mmap_mode='r').shape[0] for cp in all_chunk_paths]
+        label_ix_range = np.hstack(([0], np.cumsum(chunk_sizes)))
+
+        # Store labels per chunk for all chunks
+
+        if labels is not None:
+            self.labels = []
+            for i, ix in enumerate(label_ix_range[:-1]):
+                self.labels.append(labels[label_ix_range[i]:label_ix_range[i+1]])
+
+            # If we want only a chunk subset remove extra labels
+            self.labels = [labels_ for lb_num, labels_ in enumerate(self.labels) if lb_num in chunk_subset]
+
+    def __len__(self):
+
+        # Total number of batches this generator can produce
+        return self.num_batches
+
+    def __getitem__(self, idx):
+
+        # Load and return a batch, consisting of self.chunks_per_batch chunks and respective targets (if not None)
+        chunk_ix = idx * self.chunks_per_batch
+        chunks = [np.load(self.chunk_paths[chunk_ix + offset]) for offset in range(self.chunks_per_batch)]
+        x_batch = np.vstack(chunks)
+
+        # Final preprocessing
+        x_batch = self.preprocess_signal_batch(x_batch)
+
+        if self.labels is None:
+            return x_batch
+
+        y_batch = np.hstack(self.labels[idx:idx+self.chunks_per_batch])
+
+        x_batch = np.expand_dims(x_batch, 2)
+
+        return x_batch, y_batch
 
 def parquet_chunker(rel_path_to_file, num_chunks, chunk_name):
     '''
@@ -103,4 +193,15 @@ def postprocess_submission_vector(y_test, y_test_probas):
     return y_test
 
 if __name__ == '__main__':
-    parquet_chunker('../data/test.parquet', 200, 'test_chunks')
+    #parquet_chunker('../data/test.parquet', 200, 'test_chunks')
+
+    gen = CNN_Generator(
+        chunks_path='../preprocessed_data/pp_train_db20',
+        labels=pd.read_csv('../data/metadata_train.csv')['target'].values,
+        chunks_per_batch=4,
+        chunk_subset=list(np.arange(8,100))
+    )
+
+    first = gen.__getitem__(0)
+    third = gen.__getitem__(2)
+    print('gen test done')
