@@ -8,6 +8,7 @@ import multiprocessing as mp
 import tqdm, glob, time, pickle, re
 from itertools import product
 from false_pos_suppression import fps
+from utils import max_streak
 
 def atomic_worker(args):
 
@@ -34,7 +35,6 @@ def atomic_worker(args):
             'std_width',
             'percen_width_10',
             'percen_width_90',
-            'assymetry',
         ]
 
         # FPS params
@@ -75,9 +75,6 @@ def atomic_worker(args):
 
                     np.percentile(peak_widths, 10) if len(peak_widths) != 0 else np.nan,
                     np.percentile(peak_widths, 90) if len(peak_widths) != 0 else np.nan,
-
-                    np.abs(np.mean(peak_heights[peak_heights > 0]) / np.mean(peak_heights[peak_heights > 0])) if len(
-                        peak_heights) != 0 else np.nan,
                 ]
                 for k, feat in enumerate(feat_list):
                     base_feats_array[i, k] = feat
@@ -90,53 +87,19 @@ def atomic_worker(args):
     if compute_feats['nofps-feats']:
 
         # Feature names
-        base_feats_names = [
-            'a'
-        ]
+        nofps_feats_names = []
+        percentiles = [0.1,99.9]
+        nofps_feats_names.extend([f'percentile_{p:.2f}' for p in percentiles])
 
-        # FPS params
-        ratio_ranges = [0.25]
-        max_distances = [30]
-        rel_heights = [0.1]
 
-        for ratio_range, max_distance, rel_height in product(ratio_ranges, max_distances, rel_heights):
+        num_base_feats = len(nofps_feats_names)
+        feat_names.extend(nofps_feats_names)
 
-            suffix = f'_rr{ratio_range:.2f}_md{max_distance:d}_rl{rel_height:.2f}'
-            feat_names.extend([f'{name}{suffix}' for name in base_feats_names])
-            num_base_feats = len(base_feats_names)
+        # Feature array
+        base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
+        base_feats_array = np.percentile(signals, percentiles, axis=1).T
 
-            # Feature array
-            base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
-
-            for i, signal in tqdm.tqdm(enumerate(signals), total=signals.shape[0]):
-
-                # Extract peak properties
-                peak_heights, peak_widths, peak_ixs = fps(
-                    signal=signal,
-                    min_height=2,
-                    max_height=20,
-                    ratio_range=ratio_range,
-                    max_distance=max_distance,
-                    clean_distance=500,
-                    rel_height=rel_height,
-                )
-
-                # Compute feats
-                feat_list = [
-                    peak_heights.size,
-
-                    np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
-                    np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
-
-                    np.std(peak_widths) if len(peak_widths) != 0 else np.nan,
-
-                    np.percentile(peak_widths, 10) if len(peak_widths) != 0 else np.nan,
-                    np.percentile(peak_widths, 90) if len(peak_widths) != 0 else np.nan,
-                ]
-                for k, feat in enumerate(feat_list):
-                    base_feats_array[i, k] = feat
-
-            feat_arrays.append(base_feats_array)
+        feat_arrays.append(base_feats_array)
 
     '''
     Aggregate all feats and return as df
@@ -193,7 +156,7 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
         pickle.dump(feat_list, f2, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-dataset = 'pp_train_db20'
+dataset = 'pp_test_db20'
 st = time.time()
 
 compute_feats_template = {
@@ -202,8 +165,8 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v22',
-    # 'nofps-feats': 'nofps-feats_v21',
+    # 'base-feats': 'base-feats_v27',
+    'nofps-feats': 'nofps-feats_v22',
 }
 
 for ft_name, file_name in feats_to_gen.items():

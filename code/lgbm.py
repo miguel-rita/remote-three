@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
-
 import lightgbm as lgb
-
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import matthews_corrcoef, precision_score, recall_score
 from utils import plot_aux_visu, save_importances, save_submission, postprocess_submission_vector
@@ -35,10 +33,11 @@ class LgbmModel:
         self.sample_weight = np.ones(shape=self.y_tgt.shape)
         self.sample_weight[self.y_tgt == 1] = sample_weight
 
-        # TODO - Relabel analysis
-        # old_tgts = np.reshape(self.y_tgt, (int(self.y_tgt.size/3),-1))
-        # old_tgts[np.sum(old_tgts, axis=1)>=1] = 1
-        # self.y_tgt = np.reshape(old_tgts, (-1,))
+        # Relabel
+        old_tgts = np.reshape(self.y_tgt, (int(self.y_tgt.size/3),-1))
+        old_tgts[np.sum(old_tgts, axis=1)>=1] = 1
+        self.old_y_tgt = np.copy(self.y_tgt)
+        self.y_tgt = np.reshape(old_tgts, (-1,))
 
     def fit_predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_imps=True,
                     save_aux_visu=False):
@@ -75,7 +74,7 @@ class LgbmModel:
             # Setup fold data
             x_train, y_train = x_all[_train], self.y_tgt[_train]
             sample_weight = self.sample_weight[_train]
-            x_eval, y_eval = x_all[_eval], self.y_tgt[_eval]
+            x_eval, y_eval = x_all[_eval], self.old_y_tgt[_eval]
 
             # Setup binary LGBM
             bst = lgb.LGBMClassifier(
@@ -134,12 +133,12 @@ class LgbmModel:
         y_oof_thresholded = (y_oof >= self.default_threshold).astype(np.uint8)
         y_oof_thresholded_pp = postprocess_submission_vector(np.copy(y_oof_thresholded), y_oof)
 
-        final_metric = matthews_corrcoef(self.y_tgt, y_oof_thresholded)
-        precision_metric = precision_score(self.y_tgt, y_oof_thresholded)
-        recall_metric = recall_score(self.y_tgt, y_oof_thresholded)
-        final_metric_pp = matthews_corrcoef(self.y_tgt, y_oof_thresholded_pp)
-        precision_metric_pp = precision_score(self.y_tgt, y_oof_thresholded_pp)
-        recall_metric_pp = recall_score(self.y_tgt, y_oof_thresholded_pp)
+        final_metric = matthews_corrcoef(self.old_y_tgt, y_oof_thresholded)
+        precision_metric = precision_score(self.old_y_tgt, y_oof_thresholded)
+        recall_metric = recall_score(self.old_y_tgt, y_oof_thresholded)
+        final_metric_pp = matthews_corrcoef(self.old_y_tgt, y_oof_thresholded_pp)
+        precision_metric_pp = precision_score(self.old_y_tgt, y_oof_thresholded_pp)
+        recall_metric_pp = recall_score(self.old_y_tgt, y_oof_thresholded_pp)
         print(f'> lgbm : MCC for OOF predictions       : {final_metric_pp:.4f} (pp)')
         print(f'> lgbm : Precision for OOF predictions : {precision_metric_pp:.4f} (pp)')
         print(f'> lgbm : Recall for OOF predictions    : {recall_metric_pp:.4f} (pp)\n')

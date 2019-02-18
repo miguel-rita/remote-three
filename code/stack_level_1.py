@@ -28,14 +28,14 @@ def main():
         'cnn-models'    : bool(0),
     }
 
-    model_name = 'v26'
+    model_name = 'v28'
 
     feat_blacklist = [
         # 'mean_width_rr0.25_md30_rl0.10',
+        # 'max_streak_2000_rr0.25_md30_rl0.10',
     ]
 
     # CNN params
-
 
     '''
     LGBM Models
@@ -62,7 +62,7 @@ def main():
             y_tgt=y_tgt,
             output_dir='../level_1_preds/',
             fit_params=lgbm_params,
-            sample_weight=1.5,
+            sample_weight=1.3,
             default_threshold=0.5,
             optimize_threshold=True,
             postprocess_sub=True,
@@ -73,7 +73,7 @@ def main():
             iteration_name=model_name,
             predict_test=False,
             save_preds=True,
-            produce_sub=False,
+            produce_sub=True,
             save_imps=True,
             save_aux_visu=False,
         )
@@ -130,9 +130,9 @@ def main():
         single_cnn_params = {
             'lr': 0.05,
             'dropout_rate': 0,
-            'batch_size': 1,
+            'chunks_per_batch': 4,
             'num_epochs': 10000,
-            'verbose': 0,
+            'verbose': 1,
         }
 
         single_cnn_model = CNNModel(
