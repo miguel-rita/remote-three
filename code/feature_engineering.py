@@ -14,14 +14,13 @@ def atomic_worker(args):
 
     chunk_path, compute_feats = args
 
-    # setup
+    # Setup
     feat_names = []
     feat_arrays = []
 
-    # load preprocessed chunk
+    # Load preprocessed chunk
     signals = np.load(chunk_path)
-    
-    # compute desired features
+
     '''
     Base features
     '''

@@ -3,7 +3,7 @@ import pandas as pd
 import time, datetime, os, glob, re
 
 from keras.models import Sequential, load_model
-from keras.layers import Dense, BatchNormalization, Dropout, Conv1D, GlobalAveragePooling1D, MaxPooling1D
+from keras.layers import Dense, BatchNormalization, Dropout, Conv1D, GlobalMaxPooling1D, MaxPooling1D
 from keras.callbacks import EarlyStopping
 from keras.losses import binary_crossentropy
 from keras import optimizers, backend as K
@@ -13,35 +13,21 @@ from sklearn.model_selection import KFold
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import matthews_corrcoef
-from utils import plot_aux_visu, save_submission
+from utils import plot_aux_visu, save_submission, plot_batch_1dcnn
 
 class CNN_Generator(Sequence):
     '''
     Generator to handle data for CNN training. Includes signal normalization
     '''
 
-    def preprocess_signal_batch(self, x_batch, max_abs_height=20):
-        '''
-        Performs a series of preprocessing steps to the signal batch. Currently:
-        1) Remove peaks with abs height > max_abs_height
-        2) Scale by the max_abs_height
-
-        :param x_batch: a n-by-m numpy array containing a batch o signals
-        :return: preprocessed batch
-        '''
-
-        x_batch[np.abs(x_batch) > max_abs_height] = 0
-        x_batch = x_batch.astype(np.float16) / max_abs_height
-        return x_batch
-
-    def __init__(self, chunks_path, labels, chunks_per_batch, chunk_subset=None):
+    def __init__(self, chunks_path, labels, chunks_per_batch, batch_subset=None):
         '''
         Init generator (train and test compatible)
         :param chunks_path: path to folder containing all preprocessed dataset chunks
-        :param labels: np 1d array containg target
+        :param labels: (optional) np 1d array containg target
         :param chunks_per_batch: define batch size by number of chunks. Must divide num of chunks exactly
-        :param chunk_subset: (list, optional) if provided, will only consider chunks with number
-            in chunk_subset. Useful to implement cross validation later on
+        :param batch_subset: (list, optional) if provided, will only consider batches with number
+            in batch_subset. Useful to implement cross validation later on
         '''
 
         # Get sorted paths to signal chunks
@@ -51,8 +37,14 @@ class CNN_Generator(Sequence):
         arg_sort = np.argsort(chunk_numbers)  # get correct order
 
         # If we want only a subset of chunks
-        if chunk_subset is not None:
-            sub_arg_sort = np.array([arg for arg in arg_sort if arg in chunk_subset])
+        if batch_subset is not None:
+            # Get correct chunk subset corresponding to this batch. Eg. batch 0 has chunks 0,1,...chunks_per_batch-1
+            batch_subset = np.array(batch_subset) * chunks_per_batch
+            chunk_subset = []
+            for batch_num in batch_subset:
+                chunk_subset.extend([batch_num + i for i in range(chunks_per_batch)])
+
+            sub_arg_sort = arg_sort[np.array(chunk_subset)]
             self.chunk_paths = [chunk_paths[i] for i in sub_arg_sort]
         else:
             self.chunk_paths = [chunk_paths[i] for i in arg_sort]
@@ -78,6 +70,8 @@ class CNN_Generator(Sequence):
 
             # If we want only a chunk subset remove extra labels
             self.labels = [labels_ for lb_num, labels_ in enumerate(self.labels) if lb_num in chunk_subset]
+        else:
+            self.labels = None
 
     def __len__(self):
 
@@ -91,16 +85,13 @@ class CNN_Generator(Sequence):
         chunks = [np.load(self.chunk_paths[chunk_ix + offset]) for offset in range(self.chunks_per_batch)]
         x_batch = np.vstack(chunks)
 
-        # Final preprocessing
-        x_batch = self.preprocess_signal_batch(x_batch)
+        x_batch = np.expand_dims(x_batch, 1)
 
         if self.labels is None:
             return x_batch
 
         y_batch = np.hstack(self.labels[chunk_ix:chunk_ix+self.chunks_per_batch])
-
-        x_batch = np.expand_dims(x_batch, 1)
-
+        # plot_batch_1dcnn(x_batch, y_batch, 3)
         return x_batch, y_batch
 
 class CNNModel:
@@ -200,7 +191,7 @@ class CNNModel:
             Conv1D(
                 filters=100,
                 kernel_size=500,
-                strides=100,
+                strides=1000,
                 input_shape=(1,800000),
                 data_format='channels_first'
             ),
@@ -224,10 +215,7 @@ class CNNModel:
                 activation='relu',
                 data_format='channels_first'
             ),
-            GlobalAveragePooling1D(
-            ),
-            Dropout(
-                rate=0.5
+            GlobalMaxPooling1D(
             ),
             Dense(
                 units=1,
@@ -240,6 +228,9 @@ class CNNModel:
     # Main methods
     def fit(self, params):
 
+
+        num_batches = int(self.num_train_chunks / params['chunks_per_batch'])
+
         '''
         Setup CV
         '''
@@ -251,7 +242,7 @@ class CNNModel:
         num_folds = 5
         folds = KFold(n_splits=num_folds, shuffle=True, random_state=1)
 
-        for i, (_train, _eval) in enumerate(folds.split(np.arange(0, self.num_train_chunks))):
+        for i, (_train, _eval) in enumerate(folds.split(np.arange(0, num_batches))):
             print(f'>   CNN : Fitting fold number {i} . . .')
 
             # Setup fold data generators
@@ -259,19 +250,19 @@ class CNNModel:
                 chunks_path=self.train_chunks_path,
                 labels=self.y_tgt,
                 chunks_per_batch=params['chunks_per_batch'],
-                chunk_subset=_train,
+                batch_subset=_train,
             )
             eval_generator = CNN_Generator(
                 chunks_path=self.train_chunks_path,
                 labels=self.y_tgt,
                 chunks_per_batch=params['chunks_per_batch'],
-                chunk_subset=_eval,
+                batch_subset=_eval,
             )
             pred_generator = CNN_Generator(
                 chunks_path=self.train_chunks_path,
                 labels=None,
                 chunks_per_batch=params['chunks_per_batch'],
-                chunk_subset=_eval,
+                batch_subset=_eval,
             )
 
             '''
@@ -326,7 +317,7 @@ class CNNModel:
         print(pd.Series(self.fold_mccs).describe())
 
     def predict(self, iteration_name, predict_test=True, save_preds=True,
-                produce_sub=False, save_aux_visu=False, pred_chunks_per_batch=10):
+                produce_sub=False, save_aux_visu=False, pred_chunks_per_batch=4):
 
         if not self.models:
             raise ValueError('Must fit or load models before predicting')
@@ -356,13 +347,13 @@ class CNNModel:
                 chunks_path=self.train_chunks_path,
                 labels=None,
                 chunks_per_batch=pred_chunks_per_batch,
-                chunk_subset=_eval,
+                batch_subset=_eval,
             )
             test_pred_generator = CNN_Generator(
                 chunks_path=self.test_chunks_path,
                 labels=None,
                 chunks_per_batch=pred_chunks_per_batch,
-                chunk_subset=_eval,
+                batch_subset=_eval,
             )
 
             # Predict train oof
@@ -371,7 +362,6 @@ class CNNModel:
             )
 
             # Calc fold oof MCC
-            # Calc fold oof MCC
             y_oof_thresholded = (y_oof[_eval] >= self.default_threshold).astype(np.uint8)  # threshold
             mcc_oof = matthews_corrcoef(self.y_tgt[_eval], y_oof_thresholded)
             self.fold_mccs.append(mcc_oof)
@@ -379,7 +369,7 @@ class CNNModel:
 
             # Test predictions
             if predict_test:
-                y_test += self.models[i].predict_generator(generator=oof_pred_generator) / num_folds
+                y_test += self.models[i].predict_generator(generator=test_pred_generator) / num_folds
 
         final_name = f'cnn_1d_{iteration_name}_{np.mean(self.fold_mccs):.4f}'
 

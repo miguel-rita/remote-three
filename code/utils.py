@@ -128,16 +128,67 @@ def postprocess_submission_vector(y_test, y_test_probas):
 
     return y_test
 
+def get_sorted_chunk_paths(chunks_path):
+    '''
+    From a path to folder with numpy chunks, return (list of sorted chunk paths, argsort)
+    :param chunks_path: See above
+    :return: See above
+    '''
+
+    chunk_paths = glob.glob(chunks_path + '/*.npy')  # unsorted paths
+    chunk_suffixes = [re.search('_\d+\.npy', chunk_name).group() for chunk_name in chunk_paths]  # get suffixes
+    chunk_numbers = np.array([int(suffix[1:-4]) for suffix in chunk_suffixes])  # grab number only from each suffix
+    arg_sort = np.argsort(chunk_numbers)  # get correct order
+    return [chunk_paths[i] for i in arg_sort], arg_sort
+
+def preprocess_1dcnn(chunks_dir, dataset_name, max_abs_height=20):
+    '''
+    Performs a series of preprocessing steps to all chunks in 'chunks_dir'. Currently:
+    1) Remove peaks with abs height > max_abs_height
+    2) Scale by the max_abs_height
+    Saves preprocessed chunks in ./preprocessed_data_1dcnn.
+
+    :param chunks_dir : String, relative directory to normally preprocessed chunks.
+    :param max_abs_height : Float, set to zero every peak greater than 'max_abs_height'.
+    :param dataset_name : String, name for the final preprocessed chunks
+
+    :return: --
+    '''
+
+    if not os.path.exists(f'../preprocessed_data_1dcnn/{dataset_name}'):
+        os.mkdir(f'../preprocessed_data_1dcnn/{dataset_name}')
+
+    chunk_paths, _ = get_sorted_chunk_paths(chunks_dir)
+
+    for i, path in tqdm.tqdm(enumerate(chunk_paths), total=len(chunk_paths)):
+        chunk = np.load(path)
+        chunk[np.abs(chunk) > max_abs_height] = 0
+        chunk = chunk.astype(np.float16) / 20
+        np.save(f'../preprocessed_data_1dcnn/{dataset_name}/{dataset_name}_{i:d}.npy', chunk)
+
+def plot_batch_1dcnn(x_batch, y_batch, num_sigs):
+    '''
+    Visualize one batch of 1dcnn data
+
+    :param x_batch: Numpy array, of shape b x s x t where b = num. of
+        signals, s = 1, t = num. of timesteps. Signal data.
+    :param y_batch: Numpy array, of shape b where b = num. of signals. Target (binary) data.
+    :param num_sigs: Plot the the first 'num_sigs'.
+    :return: --
+    '''
+
+    x_batch = np.squeeze(x_batch)
+    sns.lineplot(x=np.arange(0, x_batch.shape[-1], 100), y=x_batch[0,::100])
+    plt.savefig('../visualizations/1dcnn_debug.png')
+    plt.clf()
+    plt.close()
+
+    print('Visu done.')
+
 if __name__ == '__main__':
-    #parquet_chunker('../data/test.parquet', 200, 'test_chunks')
+    # parquet_chunker('../data/test.parquet', 200, 'test_chunks')
+    preprocess_1dcnn(
+        chunks_dir='../preprocessed_data/pp_train_db20',
+        dataset_name='pp_train_db20_1dcnn',
+    )
 
-    # gen = CNN_Generator(
-    #     chunks_path='../preprocessed_data/pp_train_db20',
-    #     labels=pd.read_csv('../data/metadata_train.csv')['target'].values,
-    #     chunks_per_batch=4,
-    #     chunk_subset=list(np.arange(8,100))
-    # )
-
-    first = gen.__getitem__(0)
-    third = gen.__getitem__(2)
-    print('gen test done')

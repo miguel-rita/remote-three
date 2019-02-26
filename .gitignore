@@ -2,7 +2,15 @@
 .idea/*
 
 preprocessed_data/*
-preprocessed_data/.dir.txt
+!preprocessed_data/.dir.txt
+
+logs/*
+!logs/.dir.txt
+
+features_cnn/*.npy
+
+preprocessed_data_1dcnn/*
+!preprocessed_data_1dcnn/.dir.txt
 
 data/*
 data/.dir.txt

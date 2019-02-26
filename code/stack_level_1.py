@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from lgbm import LgbmModel
 from vanilla_mlp import MlpModel
-from cnn_1d import CNNModel
+from cnn_1d_v2 import CNNModel
 from utils import prepare_datasets
 
 def main():
@@ -23,12 +23,12 @@ def main():
 
     # Select models to train
     controls = {
-        'lgbm-models'   : bool(1),
+        'lgbm-models'   : bool(0),
         'mlp-models'    : bool(0),
-        'cnn-models'    : bool(0),
+        'cnn-models'    : bool(1),
     }
 
-    model_name = 'v28'
+    model_name = 'v31_rawcnn'
 
     feat_blacklist = [
         # 'mean_width_rr0.25_md30_rl0.10',
@@ -128,28 +128,30 @@ def main():
         cnn_output_dir = '../level_1_preds/'
 
         single_cnn_params = {
-            'lr': 0.05,
-            'dropout_rate': 0,
-            'chunks_per_batch': 4,
-            'num_epochs': 10000,
+            'lr': 0.01,
+            # 'dropout_rate': 0,
+            'batch_size': 128,
+            'num_epochs': 1000,
             'verbose': 1,
+            'patience': 10,
         }
 
         single_cnn_model = CNNModel(
-            train_chunks_path='../preprocessed_data/pp_train_db20',
-            test_chunks_path='../preprocessed_data/pp_test_db20',
+            train_tensor_path='../features_cnn/pp_train_db20_raw-feats_v1.npy',
+            test_tensor_path='../features_cnn/pp_test_db20_raw-feats_v1.npy',
             y_tgt=y_tgt,
             sample_weight=1,
             output_dir=cnn_output_dir,
             default_threshold=0.5,
             optimize_threshold=False,
+            augment_train=None,
         )
 
-        single_model_name = model_name + '_single'
+        single_model_name = model_name + '_single_cnn'
 
         single_cnn_model.fit(params=single_cnn_params)
-        # single_mlp_model.save(single_model_name)
-        # single_mlp_model.load('../models/v23_single__2019-02-02_16:16:22__0.6413')
+        # single_cnn_model.save(single_model_name)
+        # single_cnn_model.load('../models/v30_single_cnn__2019-02-21_18:43:54__0.4881')
 
         single_cnn_model.predict(
             iteration_name=single_model_name,
