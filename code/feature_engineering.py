@@ -8,6 +8,7 @@ import multiprocessing as mp
 import tqdm, glob, time, pickle, re
 from itertools import product
 from false_pos_suppression import fps
+from scipy.stats import skew
 from utils import max_streak
 
 def atomic_worker(args):
@@ -29,6 +30,7 @@ def atomic_worker(args):
         # Feature names
         base_feats_names = [
             'num_peaks',
+            'avg_loc',
             'mean_height',
             'std_height',
             'std_width',
@@ -66,6 +68,7 @@ def atomic_worker(args):
                 # Compute feats
                 feat_list = [
                     peak_heights.size,
+                    np.mean(peak_ixs) if len(peak_heights) != 0 else np.nan,
 
                     np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
                     np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
@@ -87,8 +90,11 @@ def atomic_worker(args):
 
         # Feature names
         nofps_feats_names = []
-        percentiles = [0.1,99.9]
-        nofps_feats_names.extend([f'percentile_{p:.2f}' for p in percentiles])
+        # percentiles = [0.01, 0.1, 99.9, 99.99]
+        # nofps_feats_names.extend([f'percentile_{p:.2f}' for p in percentiles])
+        nofps_feats_names.extend([
+            'skew_heights',
+        ])
 
 
         num_base_feats = len(nofps_feats_names)
@@ -96,7 +102,7 @@ def atomic_worker(args):
 
         # Feature array
         base_feats_array = np.zeros(shape=(signals.shape[0], num_base_feats))
-        base_feats_array = np.percentile(signals, percentiles, axis=1).T
+        base_feats_array = skew(np.abs(signals), axis=1).T
 
         feat_arrays.append(base_feats_array)
 
@@ -136,7 +142,7 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
 
     print(f'> feature_engineering : Creating mp pool . . .')
 
-    pool = mp.Pool(processes=mp.cpu_count())
+    pool = mp.Pool(processes=mp.cpu_count()-4)
     res = pool.map(atomic_worker, atomic_args)
     pool.close()
     pool.join()
@@ -164,8 +170,8 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    # 'base-feats': 'base-feats_v27',
-    'nofps-feats': 'nofps-feats_v22',
+    'base-feats': 'base-feats_v50',
+    # 'nofps-feats': 'nofps-feats_v45',
 }
 
 for ft_name, file_name in feats_to_gen.items():

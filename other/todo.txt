@@ -1,7 +1,7 @@
 [v] issue of thresholded probas or not for next stack level - no thresholding for stack
-[] unbalanced issue
+[v] unbalanced issue
 [] outlier removal (eg. signals 144-146)
 [] test set EDA
 [] exhaustive recheck of FPS
 [] threshold optim
-[] relabel target
+[v] relabel target

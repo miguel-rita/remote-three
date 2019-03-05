@@ -14,6 +14,9 @@ def main():
     # Select relevant cached features
     train_feats_list = [
         '../features/pp_train_db20_base-feats_v21.h5',
+        # '../features/pp_train_db20_base-feats_v50.h5',
+        # '../features/pp_train_db20_base-feats_v45_bis.h5',
+        # '../features/pp_train_db20_nofps-feats_v45.h5',
     ]
     test_feats_list = [
         '../features/pp_test_db20_base-feats_v21.h5',
@@ -23,16 +26,21 @@ def main():
 
     # Select models to train
     controls = {
-        'lgbm-models'   : bool(0),
+        'lgbm-models'   : bool(1),
         'mlp-models'    : bool(0),
-        'cnn-models'    : bool(1),
+        'cnn-models'    : bool(0),
     }
 
-    model_name = 'v31_rawcnn'
+    model_name = 'v50'
 
     feat_blacklist = [
         # 'mean_width_rr0.25_md30_rl0.10',
         # 'max_streak_2000_rr0.25_md30_rl0.10',
+        'max_4_bucket_num_peaks_rr0.25_md30_rl0.10',
+        'std_4_bucket_num_peaks_rr0.25_md30_rl0.10',
+        'max_10_bucket_num_peaks_rr0.25_md30_rl0.10',
+        'std_10_bucket_num_peaks_rr0.25_md30_rl0.10',
+        'num_peaks_log_rr0.25_md30_rl0.10',
     ]
 
     # CNN params
@@ -73,7 +81,7 @@ def main():
             iteration_name=model_name,
             predict_test=False,
             save_preds=True,
-            produce_sub=True,
+            produce_sub=False,
             save_imps=True,
             save_aux_visu=False,
         )

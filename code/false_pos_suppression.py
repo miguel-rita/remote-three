@@ -112,6 +112,7 @@ if __name__ == '__main__':
             ratio_range=0.2,
             max_distance=15,
             clean_distance=500,
+            rel_height=0.15,
         )
         clean_signal = np.zeros(pp_signals.shape[1])
         clean_signal[clean_ixs] = clean_heights

@@ -12,12 +12,13 @@ def main():
 
     # Select relevant cached features
     level_1_train_feats_list = [
-        '../level_1_preds/lgbm_v23_0.6609_pp_oof.h5',
-        '../level_1_preds/mlp_v23_single_0.6413_oof.h5',
+        '../level_1_preds/lgbm_v28_0.6930_pp_oof.h5',
+        '../level_1_preds/lgbm_v41_0.7216_pp_oof.h5',
+        # '../level_1_preds/mlp_v23_single_0.6413_oof.h5',
     ]
     level_1_test_feats_list = [
-        '../level_1_preds/lgbm_v23_0.6609_pp_test.h5',
-        '../level_1_preds/mlp_v23_single_0.6413_test.h5'
+        '../level_1_preds/lgbm_v28_0.6930_pp_test.h5',
+        '../level_1_preds/lgbm_v41_0.7216_pp_test.h5',
     ]
 
     train, test, y_tgt = prepare_datasets(level_1_train_feats_list, level_1_test_feats_list)
@@ -27,7 +28,7 @@ def main():
         'lgbm-models': bool(1),
     }
 
-    model_name = 'stack_V1_v23'
+    model_name = 'stack_V1_v41'
 
     feat_blacklist = [
     ]
@@ -57,7 +58,7 @@ def main():
             y_tgt=y_tgt,
             output_dir='../level_2_preds/',
             fit_params=lgbm_params,
-            sample_weight=1,
+            sample_weight=0.66,
             default_threshold=0.5,
             optimize_threshold=True,
             postprocess_sub=True,
