@@ -1,0 +1,6 @@
+num_peaks_rr0.25_md30_rl0.10_.5t
+mean_height_rr0.25_md30_rl0.10_.5t
+std_height_rr0.25_md30_rl0.10_.5t
+std_width_rr0.25_md30_rl0.10_.5t
+percen_width_10_rr0.25_md30_rl0.10_.5t
+percen_width_90_rr0.25_md30_rl0.10_.5t
