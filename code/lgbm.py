@@ -3,7 +3,7 @@ import numpy as np
 import lightgbm as lgb
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import matthews_corrcoef, precision_score, recall_score
-from utils import plot_aux_visu, save_importances, save_submission, postprocess_submission_vector
+from utils import plot_aux_visu, save_importances, save_submission, postprocess_stack_vector, postprocess_submission_vector
 
 '''
 LGBM Class definition
@@ -13,7 +13,7 @@ class LgbmModel:
 
     # Constructor
     def __init__(self, train, test, y_tgt, output_dir, fit_params, sample_weight, default_threshold,
-                 optimize_threshold, postprocess_sub, feat_blacklist):
+                 optimize_threshold, postprocess_sub, feat_blacklist, cv_random_seed):
 
         # dataset
         self.train = train
@@ -24,20 +24,21 @@ class LgbmModel:
         self.output_dir = output_dir
         self.fit_params = fit_params
         self.feat_blacklist = feat_blacklist
+        self.cv_random_seed = cv_random_seed
 
         self.default_threshold = default_threshold
         self.optimize_threshold = optimize_threshold
         self.postprocess_sub = postprocess_sub
-
-        # Initialize sample weight
-        self.sample_weight = np.ones(shape=self.y_tgt.shape)
-        self.sample_weight[self.y_tgt == 1] = sample_weight
 
         # Relabel
         old_tgts = np.reshape(self.y_tgt, (int(self.y_tgt.size/3),-1))
         old_tgts[np.sum(old_tgts, axis=1)>=1] = 1
         self.old_y_tgt = np.copy(self.y_tgt)
         self.y_tgt = np.reshape(old_tgts, (-1,))
+
+        # Initialize sample weight
+        self.sample_weight = np.ones(shape=self.y_tgt.shape)
+        self.sample_weight[self.y_tgt == 1] = sample_weight
 
     def fit_predict(self, iteration_name, predict_test=True, save_preds=True, produce_sub=False, save_imps=True,
                     save_aux_visu=False):
@@ -58,7 +59,7 @@ class LgbmModel:
 
         # Setup stratified CV
         num_folds = 5
-        folds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=1)
+        folds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=self.cv_random_seed)
 
         # Extract numpy arrays for use in lgbm fit method
         approved_feats = [feat for feat in list(self.train.columns) if feat not in self.feat_blacklist]
@@ -70,6 +71,8 @@ class LgbmModel:
         for i, (_train, _eval) in enumerate(folds.split(self.y_tgt, self.y_tgt)):
 
             print(f'> lgbm : Computing fold number {i} . . .')
+            np.save(f'../other/train_fold_{i:d}.npy', _train)
+            np.save(f'../other/eval_fold_{i:d}.npy', _eval)
 
             # Setup fold data
             x_train, y_train = x_all[_train], self.y_tgt[_train]
@@ -100,7 +103,7 @@ class LgbmModel:
                 sample_weight=sample_weight,
                 eval_set=[(x_eval, y_eval)],
                 eval_names=['\neval_set'],
-                early_stopping_rounds=15,
+                early_stopping_rounds=10,
                 verbose=self.fit_params['verbose'],
             )
 
@@ -125,6 +128,7 @@ class LgbmModel:
 
         print('> lgbm : CV results : ')
         print(pd.Series(eval_mccs).describe())
+        print(eval_mccs)
 
         '''
         Output wrap-up : save importances, predictions (oof and test), submission and others
@@ -155,15 +159,19 @@ class LgbmModel:
             save_importances(imps, filename_='../importances_gain/imps_' + final_name)
 
         if save_preds:
+            y_oof = postprocess_stack_vector(y_oof_thresholded, y_oof)
             train_preds_df = pd.DataFrame(data=y_oof[:, None], columns=[final_name])
             train_preds_df.to_hdf(self.output_dir + f'{final_name}_oof.h5', key='w')
 
             # No sense in saving test without train hence indent
             if predict_test:
+                y_test_thresholded = (y_test >= self.default_threshold).astype(np.uint8)
+                y_test = postprocess_stack_vector(y_test_thresholded, y_test)
                 test_preds_df = pd.DataFrame(data=y_test[:,None], columns=[final_name])
                 test_preds_df.to_hdf(self.output_dir + f'{final_name}_test.h5', key='w')
 
         if produce_sub:
+            # np.save(f'../submissions/{final_name}_raw.npy', y_test)
             save_submission(
                 y_test,
                 sub_name=f'../submissions/{final_name}.csv',

@@ -185,10 +185,10 @@ def gen_feats_cnn(save_rel_dir, save_name, preprocessed_signals_dir, compute_fea
 
     # Concat atomic computed feats and save numpy array
     feat_tensor = np.concatenate(res, axis=0)
-    np.save(save_rel_dir + '/' + save_name, feat_tensor)
+    np.save(save_rel_dir + '/' + save_name, feat_tensor.astype(np.float16))
 
 def main():
-    dataset = 'pp_train_db20'
+    dataset = 'pp_test_db20'
     st = time.time()
 
     compute_feats_template = {

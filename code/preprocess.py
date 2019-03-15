@@ -72,8 +72,10 @@ def atomic_worker(args):
     # 5. apply thresholding operation to high freq coeffs
     print(f'> preprocess.py : Applying thresholds . . .')
     num_coeffs = len(coeffs)
-    if num_high_freq_levels == None:
+    if num_high_freq_levels == None or num_high_freq_levels == 0:
         num_high_freq_levels = num_coeffs - num_low_freq_levels
+    if num_high_freq_levels < 0:
+        num_high_freq_levels = num_coeffs + num_high_freq_levels
 
     for lvl in np.arange(num_coeffs - num_high_freq_levels, num_coeffs, 1):
         coeffs[lvl] = threshold(coeffs[lvl], thresholds[lvl], mode=threshold_method)
@@ -174,10 +176,10 @@ if __name__ == '__main__':
         num_dec_levels=None,
         threshold_value_method='mad',
         threshold_method='hard',
-        num_low_freq_levels=4,
-        num_high_freq_levels=2,
+        num_low_freq_levels=0,
+        num_high_freq_levels=-4,
         save_dir_relative_path='../preprocessed_data',
-        preprocessed_name=f'pp_{dataset}_db20_l4h2',
+        preprocessed_name=f'pp_{dataset}_db20_l0h0a',
         align_phase=True,
-        num_workers=8,
+        num_workers=4,
     )

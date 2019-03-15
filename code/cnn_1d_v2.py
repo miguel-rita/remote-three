@@ -82,13 +82,12 @@ class CNNModel:
             # Also update target data
             self.y_tgt = np.concatenate((self.y_tgt, self.y_tgt[rand_ixs]))
 
-
         print(f'>   CNN : Finished internal preprocessing.')
         return train_tensor, test_tensor
 
     # Constructor
     def __init__(self, train_tensor_path, test_tensor_path, y_tgt, sample_weight, output_dir,
-                 default_threshold, optimize_threshold, augment_train=None):
+                 default_threshold, optimize_threshold, model_name, augment_train=None):
 
         # Input control
         if train_tensor_path is None or test_tensor_path is None:
@@ -106,10 +105,12 @@ class CNNModel:
         self.test_tensor = np.swapaxes(self.test_tensor, 1, 2)
 
         # Internal preprocessing
-        self.train_tensor, self.test_tensor = self.internal_preprocessing(self.train_tensor,
-                                                                          self.test_tensor, augment_train)
+        self.train_tensor, self.test_tensor = self.internal_preprocessing(
+            self.train_tensor, self.test_tensor, augment_train
+        )
 
         # Setup other params
+        self.model_name = model_name
         self.output_dir = output_dir
         self.default_threshold = default_threshold
         self.optimize_threshold = optimize_threshold
@@ -177,7 +178,6 @@ class CNNModel:
         return numerator / (denominator + K.epsilon())
 
     def build_model(self):
-
         # model layers
         layers = [
             Conv1D(
@@ -187,16 +187,16 @@ class CNNModel:
                 strides=1,
                 activation='tanh',
             ),
-            MaxPooling1D(
-                pool_size=2,
-            ),
-            BatchNormalization(),
-            Conv1D(
-                filters=120,
-                kernel_size=5,
-                strides=1,
-                activation='tanh',
-            ),
+            # MaxPooling1D(
+            #     pool_size=2,
+            # ),
+            # BatchNormalization(),
+            # Conv1D(
+            #     filters=120,
+            #     kernel_size=5,
+            #     strides=1,
+            #     activation='tanh',
+            # ),
             # MaxPooling1D(
             #     pool_size=4,
             # ),
@@ -258,7 +258,7 @@ class CNNModel:
 
             print(cnn.summary())
             timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S')
-            tensorboard = TensorBoard(log_dir=f'../logs/{timestamp}')
+            tensorboard = TensorBoard(log_dir=f'../logs/{self.model_name}_{timestamp}')
 
             hist = cnn.fit(
                 x=self.train_tensor[_train],

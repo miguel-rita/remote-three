@@ -30,7 +30,6 @@ def atomic_worker(args):
         # Feature names
         base_feats_names = [
             'num_peaks',
-            'avg_loc',
             'mean_height',
             'std_height',
             'std_width',
@@ -45,7 +44,7 @@ def atomic_worker(args):
 
         for ratio_range, max_distance, rel_height in product(ratio_ranges, max_distances, rel_heights):
 
-            suffix = f'_rr{ratio_range:.2f}_md{max_distance:d}_rl{rel_height:.2f}'
+            suffix = f'_rr{ratio_range:.2f}_md{max_distance:d}_rl{rel_height:.2f}_.5t'
             feat_names.extend([f'{name}{suffix}' for name in base_feats_names])
             num_base_feats = len(base_feats_names)
 
@@ -68,7 +67,6 @@ def atomic_worker(args):
                 # Compute feats
                 feat_list = [
                     peak_heights.size,
-                    np.mean(peak_ixs) if len(peak_heights) != 0 else np.nan,
 
                     np.mean(peak_heights) if len(peak_heights) != 0 else np.nan,
                     np.std(peak_heights) if len(peak_heights) != 0 else np.nan,
@@ -161,7 +159,7 @@ def gen_feats(save_rel_dir, save_name, preprocessed_signals_dir, compute_feats):
         pickle.dump(feat_list, f2, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-dataset = 'pp_test_db20'
+dataset = 'pp_train_db20_l4h0_.5t'
 st = time.time()
 
 compute_feats_template = {
@@ -170,7 +168,7 @@ compute_feats_template = {
 }
 
 feats_to_gen = {
-    'base-feats': 'base-feats_v50',
+    'base-feats': 'base-feats_v70',
     # 'nofps-feats': 'nofps-feats_v45',
 }
 

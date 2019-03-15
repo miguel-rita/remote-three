@@ -125,8 +125,21 @@ def postprocess_submission_vector(y_test, y_test_probas):
     y_test[(np.sum(y_test, axis=1) == 1) & (np.sum(y_test_probas, axis=1) <= 0.75)] = 0
 
     y_test = np.reshape(y_test, (-1,))
-
+    print(np.sum(y_test))
     return y_test
+
+def postprocess_stack_vector(y_vec, y_vec_probas):
+
+    y_vec = np.reshape(y_vec, (int(y_vec.size/3), -1))
+    y_vec_probas = np.reshape(y_vec_probas, (int(y_vec_probas.size/3), -1))
+
+    y_vec_probas[np.sum(y_vec, axis=1) > 1] = np.max(y_vec_probas, axis=1, keepdims=True)[np.sum(y_vec, axis=1) > 1]
+    y_vec_probas[(np.sum(y_vec, axis=1) == 1) & (np.sum(y_vec_probas, axis=1) > 1.25)] = 1.25 / 2
+    y_vec_probas[(np.sum(y_vec, axis=1) == 1) & (np.sum(y_vec_probas, axis=1) <= 0.75)] = 0
+
+    y_vec_probas = np.reshape(y_vec_probas, (-1,))
+    print(np.sum(y_vec_probas))
+    return y_vec_probas
 
 def get_sorted_chunk_paths(chunks_path):
     '''
